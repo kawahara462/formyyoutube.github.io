@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>文字化け修正ツール</title>
+
+<script src="https://cdn.jsdelivr.net/npm/jschardet@3.0.0/dist/jschardet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/iconv-lite@0.6.3/dist/iconv-lite.min.js"></script>
+
+<style>
+body{
+  font-family:sans-serif;
+  background:#1e1f26;
+  color:white;
+  padding:20px;
+}
+.container{
+  max-width:1100px;
+  margin:auto;
+}
+textarea{
+  width:100%;
+  height:200px;
+  margin:10px 0;
+  background:#2b2d3a;
+  color:#00ffcc;
+  font-family:monospace;
+  padding:10px;
+  border:none;
+  border-radius:8px;
+}
+button{
+  padding:8px 14px;
+  margin:5px;
+  border:none;
+  border-radius:6px;
+  background:#00c896;
+  color:black;
+  cursor:pointer;
+  font-weight:bold;
+}
+button:hover{
+  opacity:0.8;
+}
+.dropzone{
+  border:2px dashed #00c896;
+  padding:20px;
+  text-align:center;
+  margin-bottom:10px;
+  border-radius:10px;
+}
+.resultBox{
+  border:1px solid #00c896;
+  padding:10px;
+  margin-top:10px;
+  border-radius:8px;
+}
+h2{
+  border-bottom:1px solid #444;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+<h1>文字化け修正ツール</h1>
+
+<div class="dropzone" id="dropzone">
+TXTファイルをドラッグ＆ドロップ
+</div>
+
+<input type="file" id="fileInput" accept=".txt"><br>
+
+<textarea id="inputText" placeholder="ここに文字を貼り付けてもOK"></textarea>
+
+<button onclick="autoDetect()">自動判定して修正候補を生成</button>
+<button onclick="reverseUTF8SJIS()">UTF-8⇄Shift_JIS誤読逆算</button>
+
+<h2>修正候補一覧</h2>
+<div id="results"></div>
+
+</div>
+
+<script>
+
+const fileInput = document.getElementById("fileInput");
+const inputText = document.getElementById("inputText");
+const results = document.getElementById("results");
+const dropzone = document.getElementById("dropzone");
+
+fileInput.addEventListener("change", e=>{
+  readFile(e.target.files[0]);
+});
+
+dropzone.addEventListener("dragover", e=>{
+  e.preventDefault();
+});
+
+dropzone.addEventListener("drop", e=>{
+  e.preventDefault();
+  readFile(e.dataTransfer.files[0]);
+});
+
+function readFile(file){
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const arrayBuffer = e.target.result;
+    processBuffer(arrayBuffer);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function processBuffer(buffer){
+  const uint8 = new Uint8Array(buffer);
+
+  const detected = jschardet.detect(uint8);
+  inputText.value = iconv.decode(uint8, detected.encoding || "UTF-8");
+
+  autoDetectFromBytes(uint8);
+}
+
+function autoDetect(){
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(inputText.value);
+  autoDetectFromBytes(bytes);
+}
+
+function autoDetectFromBytes(bytes){
+  results.innerHTML = "";
+
+  const encodings = ["UTF-8","Shift_JIS","EUC-JP","UTF-16LE","UTF-16BE"];
+
+  encodings.forEach(enc=>{
+    try{
+      const decoded = iconv.decode(bytes, enc);
+      addResult(enc, decoded);
+    }catch(e){}
+  });
+}
+
+function reverseUTF8SJIS(){
+  const text = inputText.value;
+  const bytes = iconv.encode(text, "Shift_JIS");
+  const fixed = iconv.decode(bytes, "UTF-8");
+  addResult("UTF-8⇄Shift_JIS逆算", fixed);
+}
+
+function addResult(title, text){
+  const div = document.createElement("div");
+  div.className = "resultBox";
+
+  const btn = document.createElement("button");
+  btn.innerText = "TXT保存";
+  btn.onclick = ()=>{
+    const blob = new Blob([text], {type:"text/plain"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = title + "_fixed.txt";
+    a.click();
+  };
+
+  div.innerHTML = "<b>"+title+"</b><br><textarea>"+text+"</textarea>";
+  div.appendChild(btn);
+  results.appendChild(div);
+}
+
+</script>
+
+</body>
+</html>
