@@ -1,1 +1,1 @@
-# mojibake.github.io
+Googleサイトではブロックされてしまったので
