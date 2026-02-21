@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>文字化け生成ツール</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    textarea { width: 100%; height: 120px; }
+    button { margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+<h2>文字化け生成ツール</h2>
+
+<p>元の文字列</p>
+<textarea id="input"></textarea>
+
+<button onclick="makeMojibake()">文字化けさせる</button>
+
+<p>文字化け結果</p>
+<textarea id="output" readonly></textarea>
+
+<button onclick="downloadTxt()">txtで保存</button>
+
+<script>
+  let mojibakeText = "";
+
+  function makeMojibake() {
+    const input = document.getElementById("input").value;
+
+    // UTF-8でバイト列に変換
+    const utf8Bytes = new TextEncoder().encode(input);
+
+    // ISO-8859-1として誤ってデコード（＝文字化け）
+    mojibakeText = new TextDecoder("iso-8859-1").decode(utf8Bytes);
+
+    document.getElementById("output").value = mojibakeText;
+  }
+
+  function downloadTxt() {
+    const blob = new Blob([mojibakeText], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "mojibake.txt";
+    a.click();
+
+    URL.revokeObjectURL(url);
+  }
+</script>
+
+</body>
+</html>
