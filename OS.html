@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>仮想OS — 統合 完全版（Mac風 UI）</title>
+<style>
+  :root{
+    --bg:#004080;
+    --win-bg:#fff;
+    --title:#333;
+    --task:#222;
+  }
+  html,body{height:100%;margin:0;font-family:system-ui,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;-webkit-font-smoothing:antialiased;}
+  body{background:var(--bg);overflow:hidden;color:#111;}
+  .desktop{position:absolute;top:0;left:0;right:0;bottom:34px;display:flex;flex-wrap:wrap;padding:12px;gap:10px;box-sizing:border-box;}
+  .icon{width:86px;text-align:center;color:#fff;cursor:pointer;user-select:none;}
+  .icon img{width:48px;height:48px;}
+  .taskbar{position:absolute;bottom:0;left:0;right:0;height:34px;background:var(--task);display:flex;align-items:center;padding:0 12px;box-sizing:border-box;color:#fff;}
+  .task{margin-right:8px;background:#444;padding:4px 8px;border-radius:4px;cursor:pointer;user-select:none;}
+  .task.app-minimized{opacity:0.55;}
+  .task.app-closed{opacity:0.35;}
+  .window{position:absolute;background:var(--win-bg);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.45);overflow:hidden;display:none;flex-direction:column;resize:both;}
+  .titlebar{height:40px;background:linear-gradient(#f4f4f4,#e9e9e9);display:flex;align-items:center;padding:6px 12px;cursor:grab;-webkit-user-select:none;user-select:none;}
+  .mac-controls{display:flex;gap:8px;margin-right:12px;}
+  .mac-dot{width:14px;height:14px;border-radius:50%;display:inline-block;box-shadow:inset 0 -1px 0 rgba(0,0,0,0.1);}
+  .mac-dot.close{background:#ff5f57;}
+  .mac-dot.min{background:#ffbd2e;}
+  .mac-dot.max{background:#28c840;}
+  .title-text{flex:1;text-align:center;font-weight:600;color:#222;margin-right:36px;}
+  .content{padding:10px;overflow:auto;flex:1;}
+  .btn{background:#f3f3f3;border:1px solid #ddd;padding:6px 8px;border-radius:6px;cursor:pointer;}
+  .btn:active{transform:translateY(1px);}
+  .sheet-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;}
+  .sheet-area{width:100%;height:520px;overflow:auto;border:1px solid #ccc;background:#fff;border-radius:6px;}
+  table.sheet{border-collapse:collapse;min-width:800px;}
+  table.sheet th, table.sheet td{border:1px solid #ddd;padding:6px;min-width:100px;height:28px;vertical-align:middle;}
+  table.sheet th.header-col{background:#f6f8fa;cursor:pointer;user-select:none;}
+  table.sheet th.row-header{background:#f6f8fa;cursor:pointer;user-select:none;width:40px;text-align:center;}
+  td.cell{outline:none;cursor:text;}
+  .selected-row td{background:#e6f3ff !important;}
+  .selected-col{background:#e6f3ff !important;}
+  .sheet-tabs{display:flex;gap:6px;margin-bottom:8px;align-items:center;}
+  .sheet-tab{background:#f3f3f3;border:1px solid #ddd;padding:6px 10px;border-radius:6px;cursor:pointer;}
+  .sheet-tab.active{background:#fff;border:1px solid #aaa;box-shadow:0 2px 6px rgba(0,0,0,0.06);}
+  .img-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;}
+  .canvas-wrap{position:relative;background:#333;display:flex;align-items:center;justify-content:center;height:420px;border-radius:6px;overflow:hidden;}
+  .canvas-wrap canvas{position:absolute;left:0;top:0;max-width:none;}
+  .layers{border:1px solid #ddd;padding:8px;background:#fafafa;height:420px;overflow:auto;border-radius:6px;}
+  .layer-item{display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid #eee;}
+  .flex{display:flex;gap:8px;align-items:center;}
+  #multiSelectToggle.active{background:#0a84ff;color:#fff;}
+  .multi-selected{outline:2px solid #38d827 !important;border-radius:2px;}
+  @media(max-width:900px){
+    .window{width:calc(100% - 40px)!important;height:calc(100% - 80px)!important;left:20px!important;top:20px!important;}
+  }
+</style>
+</head>
+<body>
+  <div class="desktop" id="desktop"></div>
+  <div class="taskbar" id="tasks"></div>
+  <div id="windows"></div>
+
+<script>
+/* =========================
+   定数
+   ========================= */
+const DEFAULT_WIN_W = 1200;
+const DEFAULT_WIN_H = 700;
+
+/* =========================
+   アプリ定義
+   ========================= */
+
+function sheetContentHTML(){ return sheetHTML(); }
+function editorContentHTML(){ return editorHTML(); }
+function browserContentHTML(){ return browserHTML(); }
+
+const apps = [
+  { id:'sheetWin', icon:'https://cdn-icons-png.flaticon.com/512/2991/2991108.png', name:'シート', content: sheetContentHTML() },
+  { id:'editorWin', icon:'https://cdn-icons-png.flaticon.com/512/685/685686.png', name:'画像編集', content: editorContentHTML() },
+  { id:'browserWin', icon:'https://cdn-icons-png.flaticon.com/512/891/891175.png', name:'ブラウザ', content: browserContentHTML() },
+
+  { id:'extchangerWin', icon:'https://cdn-icons-png.flaticon.com/512/2089/2089679.png', name:'拡張子変更', content: `
+    <input type="file" id="fileExtInput" /><br />
+    <input type="text" id="newExt" placeholder="新しい拡張子 例:.txt" /><br />
+    <button class="btn" onclick="changeExt()">変更</button>
+  ` },
+  { id:'notepadWin', icon:'https://cdn-icons-png.flaticon.com/512/942/942748.png', name:'メモ帳', content: `
+    <textarea id="memoArea" style="width:100%; height:80%;"></textarea><br />
+    <input type="file" onchange="loadMemo(event)" /><br />
+    <button class="btn" onclick="saveMemo()">保存</button>
+  ` },
+  { id:'programWin', icon:'https://cdn-icons-png.flaticon.com/512/1006/1006555.png', name:'Program', content: `
+    <textarea id="htmlCode" placeholder="HTMLコード" style="width:100%; height:30%;"></textarea><br />
+    <textarea id="jsCode" placeholder="JavaScriptコード" style="width:100%; height:30%;"></textarea><br />
+    <iframe id="programResult" style="width:100%; height:30%; border:1px solid #ccc;"></iframe><br />
+    <button class="btn" onclick="runProgram()">実行</button>
+  ` },
+  { id:'cameraWin', icon:'https://cdn-icons-png.flaticon.com/512/685/685655.png', name:'カメラ', content: `
+    <video id="cameraView" autoplay playsinline style="width:100%;"></video><br />
+    <button class="btn" onclick="takePhoto()">撮影</button>
+  ` },
+  { id:'appstoreWin', icon:'https://cdn-icons-png.flaticon.com/512/3649/3649469.png', name:'アプリストア', content: `
+    <input type="file" id="appFileInput" accept="text/html" /><br />
+    <button class="btn" onclick="addApp()">追加</button>
+    <div id="appList"></div>
+  ` },
+  { id:'trashWin', icon:'https://cdn-icons-png.flaticon.com/512/565/565491.png', name:'ゴミ箱', content: `<div id="trashContent">ここにゴミ箱の中身を表示します。</div>` }
+];
+
+/* =========================
+   デスクトップ・ウィンドウ生成
+   ========================= */
+
+const desktop = document.getElementById('desktop');
+const windowsContainer = document.getElementById('windows');
+const tasks = document.getElementById('tasks');
+let zIndex = 100;
+
+apps.forEach(app=>{
+  // デスクトップアイコン
+  const icon = document.createElement('div'); icon.className='icon';
+  icon.innerHTML = `<img src="${app.icon}" alt="${app.name}"><br>${app.name}`;
+  icon.onclick = ()=> openWindow(app.id);
+  desktop.appendChild(icon);
+
+  // ウィンドウ
+  const win = document.createElement('div'); win.className='window'; win.id = app.id;
+  win.style.width = DEFAULT_WIN_W + 'px';
+  win.style.height = DEFAULT_WIN_H + 'px';
+  win.style.left = '80px'; win.style.top = '60px';
+  win.innerHTML = `
+    <div class="titlebar" onmousedown="startDrag(event,this)">
+      <div class="mac-controls" style="margin-right:8px;">
+        <span class="mac-dot close" onclick="closeWindow('${app.id}')" title="閉じる"></span>
+        <span class="mac-dot min" onclick="minimizeWindow('${app.id}')" title="最小化"></span>
+        <span class="mac-dot max" onclick="maximizeWindow('${app.id}')" title="最大化/復元"></span>
+      </div>
+      <div class="title-text">${app.name}</div>
+      <div class="title-actions"></div>
+    </div>
+    <div class="content">${app.content}</div>
+  `;
+  windowsContainer.appendChild(win);
+});
+
+/* =========================
+   ウィンドウ管理（修正版）
+   - closeWindow / minimizeWindow はウィンドウ非表示にするが
+     タスクバーのアイコンは残し、クリックで復元できる
+   ========================= */
+
+function openWindow(id){
+  const win = document.getElementById(id); if(!win) return;
+  win.style.display = 'flex';
+  win.style.zIndex = ++zIndex;
+  win.dataset.minimized = '0';
+  win.dataset.closed = '0';
+
+  // タスク追加（なければ）
+  if(!tasks.querySelector(`.task[data-app="${id}"]`)){
+    const t = document.createElement('span'); t.className='task'; t.dataset.app = id; t.textContent = id.replace('Win','');
+    t.onclick = ()=> {
+      const w = document.getElementById(id);
+      if(!w) return;
+      if(w.style.display === 'none'){
+        // restore
+        w.style.display = 'flex';
+        w.dataset.minimized = '0';
+        w.dataset.closed = '0';
+        w.style.zIndex = ++zIndex;
+        t.classList.remove('app-minimized','app-closed');
+      } else {
+        // focus
+        w.style.zIndex = ++zIndex;
+      }
+    };
+    tasks.appendChild(t);
+  }
+  // app-specific init
+  if(id==='sheetWin') initSheetApp();
+  if(id==='editorWin') initEditorApp();
+  if(id==='browserWin' && browserTabs.length===0) browserNewTab();
+}
+
+function closeWindow(id){
+  const win = document.getElementById(id); if(!win) return;
+  win.style.display = 'none';
+  win.dataset.closed = '1';
+  win.dataset.minimized = '0';
+  // reflect on task icon
+  const t = tasks.querySelector(`.task[data-app="${id}"]`);
+  if(t){
+    t.classList.remove('app-minimized');
+    t.classList.add('app-closed');
+  }
+}
+
+function minimizeWindow(id){
+  const win = document.getElementById(id); if(!win) return;
+  win.style.display = 'none';
+  win.dataset.minimized = '1';
+  win.dataset.closed = '0';
+  const t = tasks.querySelector(`.task[data-app="${id}"]`);
+  if(t){
+    t.classList.remove('app-closed');
+    t.classList.add('app-minimized');
+  }
+}
+
+function maximizeWindow(id){
+  const win = document.getElementById(id); if(!win) return;
+  if(win.dataset.max === '1'){
+    // restore
+    win.style.width = (win.dataset.prevW || DEFAULT_WIN_W) + 'px';
+    win.style.height = (win.dataset.prevH || DEFAULT_WIN_H) + 'px';
+    win.style.left = (win.dataset.prevL || 80) + 'px';
+    win.style.top = (win.dataset.prevT || 60) + 'px';
+    win.dataset.max = '0';
+  } else {
+    win.dataset.prevW = parseInt(win.style.width);
+    win.dataset.prevH = parseInt(win.style.height);
+    win.dataset.prevL = parseInt(win.style.left);
+    win.dataset.prevT = parseInt(win.style.top);
+    win.style.left = '20px'; win.style.top = '20px';
+    win.style.width = (window.innerWidth - 40) + 'px';
+    win.style.height = (window.innerHeight - 80) + 'px';
+    win.dataset.max = '1';
+  }
+}
+
+function focusWindow(id){
+  const win = document.getElementById(id); if(!win) return;
+  win.style.display = 'flex';
+  win.style.zIndex = ++zIndex;
+  win.dataset.minimized = '0';
+  win.dataset.closed = '0';
+  const t = tasks.querySelector(`.task[data-app="${id}"]`);
+  if(t) t.classList.remove('app-minimized','app-closed');
+}
+
+/* drag support */
+function startDrag(e, el){
+  // el is the titlebar element; parent is .window
+  const win = el.parentElement;
+  e.preventDefault();
+  const rect = win.getBoundingClientRect();
+  const offsetX = e.clientX - rect.left;
+  const offsetY = e.clientY - rect.top;
+  function onMove(ev){
+    let left = ev.clientX - offsetX;
+    let top = ev.clientY - offsetY;
+    left = Math.max(0, Math.min(window.innerWidth - win.offsetWidth, left));
+    top = Math.max(0, Math.min(window.innerHeight - win.offsetHeight - 34, top));
+    win.style.left = left + 'px'; win.style.top = top + 'px';
+  }
+  function onUp(){ window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); }
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
+}
+
+/* =========================
+   ブラウザ（複数タブ） — シンプル
+   ========================= */
+
+function browserHTML(){
+  return `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+      <button class="btn" onclick="browserNewTab()">＋ 新しいタブ</button>
+      <button class="btn" onclick="browserShowURLPrompt()">開く</button>
+      <input id="browserURL" style="flex:1;padding:6px;border:1px solid #ccc;border-radius:6px;" placeholder="URLを入力">
+    </div>
+    <div class="browser-tabs" id="browserTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;"></div>
+    <iframe id="browserView" style="width:100%;height:580px;border:1px solid #ccc;border-radius:6px;"></iframe>
+  `;
+}
+const browserTabs = []; let browserActiveTab = -1;
+function browserRenderTabs(){ const area=document.getElementById('browserTabs'); if(!area) return; area.innerHTML=''; browserTabs.forEach((t,i)=>{ const b=document.createElement('div'); b.className='sheet-tab'+(i===browserActiveTab?' active':''); b.textContent = t.title || t.url; const x=document.createElement('span'); x.textContent=' ×'; x.style.marginLeft='6px'; x.style.cursor='pointer'; x.onclick=(e)=>{ e.stopPropagation(); browserCloseTab(i); }; b.onclick=()=>browserSwitchTab(i); b.appendChild(x); area.appendChild(b); }); }
+function browserNewTab(url){ url = url || 'https://newnetwork-qzzt.onrender.com/'; browserTabs.push({title:'新しいタブ', url}); browserActiveTab = browserTabs.length-1; browserSwitchTab(browserActiveTab); }
+function browserSwitchTab(i){ browserActiveTab = i; const iframe = document.getElementById('browserView'); iframe.src = browserTabs[i].url; const urlInput = document.getElementById('browserURL'); if(urlInput) urlInput.value = browserTabs[i].url; browserRenderTabs(); }
+function browserCloseTab(i){ browserTabs.splice(i,1); if(browserActiveTab >= browserTabs.length) browserActiveTab = browserTabs.length - 1; if(browserTabs.length === 0){ document.getElementById('browserView').src = ''; browserActiveTab = -1; } else browserSwitchTab(browserActiveTab); }
+function browserShowURLPrompt(){ const u=document.getElementById('browserURL').value.trim(); if(!u) return alert('URLを入力してください'); if(browserActiveTab===-1) browserNewTab(u); else { browserTabs[browserActiveTab].url = u; browserSwitchTab(browserActiveTab); } }
+
+/* =========================
+   シートアプリ（多機能） — 統合版
+   追加: 複数選択モード（multi-select）
+   既存機能は維持
+   ========================= */
+
+/* HTML of sheet */
+function sheetHTML(){
+  return `
+    <div class="sheet-toolbar">
+      <button class="btn" onclick="sheetAddRow()">行追加（選択行の下）</button>
+      <button class="btn" onclick="sheetRemoveRow()">行削除（選択行）</button>
+      <button class="btn" onclick="sheetAddCol()">列追加（選択列の右）</button>
+      <button class="btn" onclick="sheetRemoveCol()">列削除（選択列）</button>
+
+      <button class="btn" onclick="sheetMerge()">セル結合（簡易）</button>
+
+      <label>セル色 <input type="color" id="cellColor" value="#ffffff"></label>
+      <label>フォントサイズ <input type="number" id="cellFontSize" value="14" style="width:70px"></label>
+      <button class="btn" onclick="applyCellStyle()">適用</button>
+
+      <button class="btn" onclick="sheetImportCSV()">CSV読込</button>
+      <button class="btn" onclick="sheetExportCSV()">CSV書出</button>
+      <button class="btn" onclick="sheetPrint()">印刷</button>
+
+      <button class="btn" onclick="sheetUndo()">Undo</button>
+      <button class="btn" onclick="sheetRedo()">Redo</button>
+
+      <button class="btn" id="multiSelectToggle" onclick="toggleMultiSelect()">複数選択</button>
+    </div>
+
+    <div class="sheet-tabs" id="sheetTabs"></div>
+
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+      <button class="btn" onclick="sheetNewSheet()">＋ シート追加</button>
+      <div style="flex:1">
+        <input id="formulaBar" style="width:100%;padding:6px;border:1px solid #ccc;border-radius:6px;" placeholder="数式バー：セルを選択して編集できます" onkeydown="if(event.key==='Enter'){applyFormulaBar()}">
+      </div>
+      <div>選択: <span id="sheetSelection">なし</span></div>
+    </div>
+
+    <div class="sheet-area">
+      <div id="sheetContainer"></div>
+    </div>
+  `;
+}
+
+/* sheet data */
+let sheets = [];
+let currentSheet = 0;
+let sheetInitialized = false;
+let sheetSelectedCell = null;
+let sheetSelectedRow = null;
+let sheetSelectedCol = null;
+
+/* multi-select */
+let multiSelectMode = false;
+let selectedCells = new Set(); // store names like "A1"
+
+/* init */
+function initSheetApp(){
+  if(sheetInitialized){ renderSheetTabs(); renderSheet(); return; }
+  sheetInitialized = true;
+  sheets = [createEmptySheet('Sheet1', 12, 8)];
+  currentSheet = 0;
+  renderSheetTabs();
+  renderSheet();
+  attachSheetKeyboard();
+  saveSheetHistory();
+}
+
+function createEmptySheet(name, rows, cols){
+  return { name, rows, cols, cells: {}, merged: [], history: [], historyIndex: -1 };
+}
+
+function coordToName(c,r){
+  let name=''; let x=c+1;
+  while(x>0){ let rem=(x-1)%26; name = String.fromCharCode(65+rem) + name; x = Math.floor((x-1)/26); }
+  return name + (r+1);
+}
+function nameToCoord(name){
+  const m = name.match(/^([A-Z]+)(\d+)$/);
+  if(!m) return null;
+  let col=0; for(let ch of m[1]) col = col*26 + (ch.charCodeAt(0)-64);
+  col = col-1;
+  const row = parseInt(m[2],10)-1;
+  return { col, row };
+}
+
+function renderSheetTabs(){
+  const area = document.getElementById('sheetTabs'); area.innerHTML='';
+  sheets.forEach((s,i)=>{
+    const btn = document.createElement('button'); btn.className='sheet-tab'+(i===currentSheet?' active':''); btn.textContent = s.name;
+    btn.onclick = ()=>{ currentSheet = i; renderSheet(); renderSheetTabs(); };
+    btn.ondblclick = ()=>{ const newName = prompt('シート名を入力', s.name); if(newName){ s.name = newName; renderSheetTabs(); } };
+    btn.oncontextmenu = (e)=>{ e.preventDefault(); const action = prompt('操作: delete / dup (削除/複製)'); if(action==='delete'){ if(confirm('本当に削除しますか？')){ sheets.splice(i,1); currentSheet = Math.max(0, currentSheet-1); renderSheetTabs(); renderSheet(); } } else if(action==='dup'){ sheets.splice(i+1,0, JSON.parse(JSON.stringify(s))); renderSheetTabs(); } };
+    area.appendChild(btn);
+  });
+}
+
+function renderSheet(){
+  const cont = document.getElementById('sheetContainer'); cont.innerHTML='';
+  const s = sheets[currentSheet];
+  const table = document.createElement('table'); table.className='sheet';
+  const thead = document.createElement('thead'); const htr = document.createElement('tr');
+  const corner = document.createElement('th'); corner.className='header-col'; corner.textContent=''; htr.appendChild(corner);
+  for(let c=0;c<s.cols;c++){
+    const th = document.createElement('th'); th.className='header-col';
+    let colLabel=''; let x=c+1; while(x>0){ let rem=(x-1)%26; colLabel = String.fromCharCode(65+rem) + colLabel; x=Math.floor((x-1)/26); }
+    th.textContent = colLabel;
+    th.onclick = ()=> selectCol(c);
+    if(sheetSelectedCol === c) th.classList.add('selected-col');
+    htr.appendChild(th);
+  }
+  thead.appendChild(htr); table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  for(let r=0;r<s.rows;r++){
+    const tr = document.createElement('tr');
+    const th = document.createElement('th'); th.className='row-header'; th.textContent = r+1;
+    th.onclick = ()=> selectRow(r);
+    if(sheetSelectedRow === r) tr.classList.add('selected-row');
+    tr.appendChild(th);
+    for(let c=0;c<s.cols;c++){
+      const name = coordToName(c,r);
+      const td = document.createElement('td'); td.className='cell'; td.contentEditable = true; td.dataset.name = name;
+      const cell = s.cells[name];
+      td.innerText = cell && cell.text ? cell.text : '';
+      if(cell && cell.style){
+        if(cell.style.background) td.style.background = cell.style.background;
+        if(cell.style.fontSize) td.style.fontSize = (cell.style.fontSize+'px');
+      }
+      // mark multi-selected if set
+      if(selectedCells.has(name)) td.classList.add('multi-selected');
+      td.onclick = (e)=>{ e.stopPropagation(); cellClicked(td); };
+      td.oninput = ()=> { setCellText(name, td.innerText); evaluateAllCells(); };
+      td.onblur = ()=> { saveSheetHistory(); };
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody); cont.appendChild(table);
+  evaluateAllCells();
+  updateSelectionDisplay();
+}
+
+/* selection logic */
+function cellClicked(td){
+  const name = td.dataset.name;
+  if(multiSelectMode){
+    if(selectedCells.has(name)){
+      selectedCells.delete(name); td.classList.remove('multi-selected');
+    } else {
+      selectedCells.add(name); td.classList.add('multi-selected');
+    }
+    // update selection display
+    document.getElementById('sheetSelection').textContent = selectedCells.size > 0 ? (selectedCells.size + ' cells') : 'なし';
+    return;
+  }
+  // single selection default
+  sheetSelectedCell = name;
+  sheetSelectedRow = null; sheetSelectedCol = null;
+  document.getElementById('formulaBar').value = getCellText(sheetSelectedCell) || '';
+  updateSelectionDisplay();
+  // re-render highlights
+  renderSheet();
+}
+
+function selectRow(r){
+  // clear multi-select when using row selection
+  clearMultiSelect();
+  sheetSelectedRow = r; sheetSelectedCol = null; sheetSelectedCell = null;
+  document.getElementById('formulaBar').value = '';
+  renderSheet();
+}
+function selectCol(c){
+  clearMultiSelect();
+  sheetSelectedCol = c; sheetSelectedRow = null; sheetSelectedCell = null;
+  document.getElementById('formulaBar').value = '';
+  renderSheet();
+}
+
+function updateSelectionDisplay(){
+  const el = document.getElementById('sheetSelection');
+  if(multiSelectMode && selectedCells.size>0) el.textContent = selectedCells.size + ' cells selected';
+  else if(sheetSelectedCell) el.textContent = sheetSelectedCell;
+  else if(sheetSelectedRow !== null) el.textContent = '行 ' + (sheetSelectedRow+1);
+  else if(sheetSelectedCol !== null) el.textContent = '列 ' + colIndexToLabel(sheetSelectedCol);
+  else el.textContent = 'なし';
+}
+function colIndexToLabel(c){ let name=''; let x=c+1; while(x>0){ let rem=(x-1)%26; name = String.fromCharCode(65+rem) + name; x=Math.floor((x-1)/26); } return name; }
+
+/* multi-select toggle */
+function toggleMultiSelect(){
+  multiSelectMode = !multiSelectMode;
+  const btn = document.getElementById('multiSelectToggle');
+  if(multiSelectMode) btn.classList.add('active'); else btn.classList.remove('active');
+  if(!multiSelectMode){
+    // clear highlights
+    clearMultiSelect();
+  }
+}
+function clearMultiSelect(){
+  selectedCells.forEach(nm=>{
+    const ele = document.querySelector(`#sheetContainer td[data-name="${nm}"], #sheetContainer td[data-name="${nm}"]`);
+    // There can be mismatch of attribute name - easier to re-render and clear set
+  });
+  selectedCells.clear();
+  renderSheet();
+}
+
+/* cell get/set */
+function getCellText(name){
+  const s = sheets[currentSheet];
+  return s.cells[name] && s.cells[name].text ? s.cells[name].text : '';
+}
+function setCellText(name, text){
+  const s = sheets[currentSheet];
+  s.cells[name] = s.cells[name] || {};
+  s.cells[name].text = text;
+}
+
+/* formula eval (preserve) */
+function evalExpression(expr){
+  expr = String(expr || '').trim();
+  if(expr === '') return '';
+  if(expr[0] !== '=') return expr;
+  let body = expr.slice(1);
+  body = body.replace(/SUM\s*\(\s*([^\)]+)\s*\)/ig, (m,inside)=>{
+    const parts = inside.split(/\s*,\s*/);
+    let total = 0;
+    parts.forEach(p=>{
+      if(p.includes(':')){
+        const [a,b] = p.split(':');
+        const ca = nameToCoord(a.trim()), cb = nameToCoord(b.trim());
+        if(!ca || !cb) return;
+        for(let rr=Math.min(ca.row,cb.row); rr<=Math.max(ca.row,cb.row); rr++){
+          for(let cc=Math.min(ca.col,cb.col); cc<=Math.max(ca.col,cb.col); cc++){
+            const nm = coordToName(cc,rr);
+            const v = parseFloat(evalExpression(getCellText(nm)) || 0) || 0;
+            total += v;
+          }
+        }
+      } else {
+        const cc = nameToCoord(p.trim());
+        if(cc){ const v = parseFloat(evalExpression(getCellText(p.trim())) || 0) || 0; total += v; }
+        else { const v=parseFloat(p); if(!isNaN(v)) total += v; }
+      }
+    });
+    return total;
+  });
+  body = body.replace(/\b([A-Z]+[0-9]+)\b/g, (m)=>{
+    const val = getCellText(m);
+    if(val === undefined || val === null || val === '') return '0';
+    const ev = evalExpression(val);
+    return (ev === '' ? 0 : ev);
+  });
+  try { const res = eval(body); return (res === undefined ? '' : String(res)); } catch(e){ return '#ERR'; }
+}
+
+function evaluateAllCells(){
+  const s = sheets[currentSheet];
+  for(const key in s.cells){
+    const cell = s.cells[key];
+    if(cell && typeof cell.text === 'string' && cell.text.startsWith('=')) cell._value = evalExpression(cell.text);
+    else if(cell && cell.text !== undefined) cell._value = cell.text;
+  }
+  document.querySelectorAll('#sheetContainer td.cell').forEach(td=>{
+    const nm = td.dataset.name;
+    const c = sheets[currentSheet].cells[nm];
+    if(c && c.text && c.text.startsWith('=')) td.innerText = c._value;
+  });
+}
+
+/* row/col add/remove with selection-aware behavior */
+function sheetAddRow(){
+  const s = sheets[currentSheet];
+  if(sheetSelectedRow === null){ return alert('行を選択してから追加してください（選択行の下に追加されます）'); }
+  const insertIndex = sheetSelectedRow + 1;
+  for(let r=s.rows-1; r>=insertIndex; r--){
+    for(let c=0;c<s.cols;c++){
+      const from = coordToName(c,r);
+      const to = coordToName(c,r+1);
+      s.cells[to] = s.cells[from];
+    }
+  }
+  for(let c=0;c<s.cols;c++){ delete s.cells[coordToName(c,insertIndex)]; }
+  s.rows += 1;
+  // clear multi selection
+  selectedCells.clear(); multiSelectMode = false; document.getElementById('multiSelectToggle').classList.remove('active');
+  sheetSelectedRow = insertIndex; sheetSelectedCell = null; sheetSelectedCol = null;
+  renderSheet(); saveSheetHistory();
+}
+function sheetRemoveRow(){
+  const s = sheets[currentSheet];
+  if(sheetSelectedRow === null){ return alert('削除する行を選択してください'); }
+  if(s.rows <= 1) return alert('これ以上行を削除できません');
+  const delIndex = sheetSelectedRow;
+  for(let r=delIndex; r<s.rows-1; r++){
+    for(let c=0;c<s.cols;c++){
+      const from = coordToName(c,r+1);
+      const to = coordToName(c,r);
+      s.cells[to] = s.cells[from];
+    }
+  }
+  for(let c=0;c<s.cols;c++){ delete s.cells[coordToName(c,s.rows-1)]; }
+  s.rows -= 1;
+  selectedCells.clear();
+  sheetSelectedRow = null; sheetSelectedCell = null;
+  renderSheet(); saveSheetHistory();
+}
+function sheetAddCol(){
+  const s = sheets[currentSheet];
+  if(sheetSelectedCol === null){ return alert('列を選択してから追加してください（選択列の右に追加されます）'); }
+  const insertIndex = sheetSelectedCol + 1;
+  for(let c=s.cols-1; c>=insertIndex; c--){
+    for(let r=0;r<s.rows;r++){
+      const from = coordToName(c,r);
+      const to = coordToName(c+1,r);
+      s.cells[to] = s.cells[from];
+    }
+  }
+  for(let r=0;r<s.rows;r++){ delete s.cells[coordToName(insertIndex,r)]; }
+  s.cols += 1;
+  selectedCells.clear();
+  sheetSelectedCol = insertIndex; sheetSelectedCell = null; sheetSelectedRow = null;
+  renderSheet(); saveSheetHistory();
+}
+function sheetRemoveCol(){
+  const s = sheets[currentSheet];
+  if(sheetSelectedCol === null) return alert('削除する列を選択してください');
+  if(s.cols <= 1) return alert('これ以上列を削除できません');
+  const delIndex = sheetSelectedCol;
+  for(let c=delIndex; c<s.cols-1; c++){
+    for(let r=0;r<s.rows;r++){
+      const from = coordToName(c+1,r);
+      const to = coordToName(c,r);
+      s.cells[to] = s.cells[from];
+    }
+  }
+  for(let r=0;r<s.rows;r++){ delete s.cells[coordToName(s.cols-1,r)]; }
+  s.cols -= 1;
+  selectedCells.clear();
+  sheetSelectedCol = null; sheetSelectedCell = null;
+  renderSheet(); saveSheetHistory();
+}
+
+/* style apply — if multi-select active apply to all selected */
+function applyCellStyle(){
+  const color = document.getElementById('cellColor').value;
+  const fs = parseInt(document.getElementById('cellFontSize').value,10) || 14;
+  const s = sheets[currentSheet];
+  if(multiSelectMode && selectedCells.size>0){
+    selectedCells.forEach(nm=>{
+      s.cells[nm] = s.cells[nm] || {};
+      s.cells[nm].style = s.cells[nm].style || {};
+      s.cells[nm].style.background = color;
+      s.cells[nm].style.fontSize = fs;
+    });
+  } else {
+    if(!sheetSelectedCell) return alert('セルを選択してください（セル色・フォントサイズ適用）');
+    s.cells[sheetSelectedCell] = s.cells[sheetSelectedCell] || {};
+    s.cells[sheetSelectedCell].style = s.cells[sheetSelectedCell].style || {};
+    s.cells[sheetSelectedCell].style.background = color;
+    s.cells[sheetSelectedCell].style.fontSize = fs;
+  }
+  renderSheet(); saveSheetHistory();
+}
+
+/* merge simplified (right neighbor) */
+function sheetMerge(){ if(!sheetSelectedCell) return alert('結合する基準のセルを選択してください（簡易：右隣と結合）'); const coord = nameToCoord(sheetSelectedCell); if(!coord) return; const right = coordToName(coord.col+1,coord.row); const s = sheets[currentSheet]; s.cells[sheetSelectedCell] = s.cells[sheetSelectedCell] || {}; s.cells[sheetSelectedCell].colspan = (s.cells[sheetSelectedCell].colspan||1) + 1; s.cells[right] = s.cells[right] || {}; s.cells[right]._merged = true; renderSheet(); saveSheetHistory(); }
+
+/* CSV import/export */
+function sheetExportCSV(){ const s = sheets[currentSheet]; let csv=''; for(let r=0;r<s.rows;r++){ const rowArr=[]; for(let c=0;c<s.cols;c++){ const nm = coordToName(c,r); let v = s.cells[nm] && s.cells[nm].text ? s.cells[nm].text : ''; v = String(v).replace(/"/g,'""'); if(v.indexOf(',')>=0 || v.indexOf('"')>=0) v = `"${v}"`; rowArr.push(v); } csv += rowArr.join(',') + '\n'; } const blob = new Blob([csv], { type:'text/csv' }); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=(s.name||'sheet')+'.csv'; a.click(); }
+function sheetImportCSV(){ const inp=document.createElement('input'); inp.type='file'; inp.accept='.csv,text/csv'; inp.onchange=(e)=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ const txt=r.result; const rows=txt.split(/\r?\n/).filter(x=>x.length>0).map(rw=>parseCSVRow(rw)); const newRows=rows.length; const newCols=Math.max(...rows.map(rr=>rr.length)); const s=sheets[currentSheet]; s.rows=Math.max(s.rows,newRows); s.cols=Math.max(s.cols,newCols); for(let r=0;r<rows.length;r++){ for(let c=0;c<rows[r].length;c++){ const nm=coordToName(c,r); s.cells[nm]=s.cells[nm]||{}; s.cells[nm].text = rows[r][c]; } } renderSheet(); saveSheetHistory(); }; r.readAsText(f); }; inp.click(); }
+function parseCSVRow(row){ const out=[]; let cur=''; let inQuotes=false; for(let i=0;i<row.length;i++){ const ch=row[i]; if(inQuotes){ if(ch==='\"'){ if(row[i+1]==='\"'){ cur+='\"'; i++; } else inQuotes=false; } else cur+=ch; } else { if(ch==='"'){ inQuotes=true; } else if(ch===','){ out.push(cur); cur=''; } else cur+=ch; } } out.push(cur); return out; }
+
+/* Undo/Redo */
+function saveSheetHistory(){ const s = sheets[currentSheet]; const snap = JSON.stringify(s); s.history = s.history.slice(0, s.historyIndex+1); s.history.push(snap); s.historyIndex = s.history.length - 1; }
+function sheetUndo(){ const s = sheets[currentSheet]; if(s.historyIndex <= 0) return alert('これ以上Undoできません'); s.historyIndex--; const prev = JSON.parse(s.history[s.historyIndex]); sheets[currentSheet] = prev; renderSheetTabs(); renderSheet(); }
+function sheetRedo(){ const s = sheets[currentSheet]; if(s.historyIndex >= s.history.length-1) return alert('これ以上Redoできません'); s.historyIndex++; const next = JSON.parse(s.history[s.historyIndex]); sheets[currentSheet] = next; renderSheetTabs(); renderSheet(); }
+
+function applyFormulaBar(){ const v=document.getElementById('formulaBar').value; if(!sheetSelectedCell) return alert('セルを選択してから数式バーを使ってください'); setCellText(sheetSelectedCell, v); renderSheet(); evaluateAllCells(); saveSheetHistory(); }
+function attachSheetKeyboard(){ document.addEventListener('keydown',(e)=>{ if(!sheetInitialized) return; if(e.ctrlKey && e.key.toLowerCase()==='c'){ if(sheetSelectedCell){ navigator.clipboard && navigator.clipboard.writeText(getCellText(sheetSelectedCell)); } } else if(e.ctrlKey && e.key.toLowerCase()==='v'){ if(sheetSelectedCell){ navigator.clipboard && navigator.clipboard.readText().then(txt=>{ setCellText(sheetSelectedCell, txt); renderSheet(); evaluateAllCells(); saveSheetHistory(); }); } } }); }
+function sheetNewSheet(){ const name = prompt('シート名を入力','Sheet'+(sheets.length+1)); if(!name) return; sheets.push(createEmptySheet(name, 20, 10)); currentSheet = sheets.length-1; renderSheetTabs(); renderSheet(); saveSheetHistory(); }
+function sheetPrint(){ const w = window.open('','_blank'); w.document.write('<html><head><meta charset="utf-8"><title>Print</title></head><body>'); w.document.write(document.getElementById('sheetContainer').innerHTML); w.document.write('</body></html>'); w.document.close(); w.print(); }
+
+/* =========================
+   画像編集（統合保守）
+   ========================= */
+
+function editorHTML(){
+  return `
+    <div style="display:flex;gap:12px;">
+      <div style="flex:1">
+        <div class="img-toolbar">
+          <input type="file" id="imgFile" accept="image/*" />
+          <button class="btn" onclick="editorAddLayerFromFile()">画像レイヤ追加</button>
+          <button class="btn" onclick="editorNewLayer()">新規透明レイヤ</button>
+          <label>ツール
+            <select id="editorTool">
+              <option value="pen">ペン</option>
+              <option value="eraser">消しゴム</option>
+              <option value="stamp">スタンプ</option>
+              <option value="move">移動</option>
+              <option value="crop">切り抜き</option>
+            </select>
+          </label>
+          <label>色 <input type="color" id="penColor" value="#ff0000"></label>
+          <label>太さ <input type="number" id="penSize" value="4" style="width:70px"></label>
+          <button class="btn" onclick="editorUndo()">Undo</button>
+          <button class="btn" onclick="editorRedo()">Redo</button>
+          <button class="btn" onclick="editorExport('png')">PNG保存</button>
+          <button class="btn" onclick="editorExport('jpg')">JPEG保存</button>
+        </div>
+        <div class="canvas-wrap" id="canvasWrap" style="height:420px;"></div>
+      </div>
+
+      <div style="width:320px">
+        <h4>レイヤー</h4>
+        <div class="layers" id="layersPanel"></div>
+
+        <h4>変形 / フィルタ</h4>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn" onclick="applyRotate(90)">90°回転</button>
+          <button class="btn" onclick="applyRotate(-90)">-90°</button>
+          <button class="btn" onclick="applyFlip('h')">左右反転</button>
+          <button class="btn" onclick="applyFlip('v')">上下反転</button>
+          <button class="btn" onclick="applyCrop()">切り抜き適用</button>
+        </div>
+
+        <div style="margin-top:8px;">
+          <label>明るさ <input type="range" id="brightness" min="-100" max="100" value="0" oninput="applyQC()"></label><br>
+          <label>コントラスト <input type="range" id="contrast" min="-100" max="100" value="0" oninput="applyQC()"></label><br>
+          <label>ぼかし <input type="range" id="blur" min="0" max="10" value="0" oninput="applyQC()"></label><br>
+          <label>シャープ <input type="range" id="sharpen" min="0" max="5" value="0" oninput="applyQC()"></label><br>
+          <button class="btn" onclick="applyFilterPreset('grayscale')">白黒</button>
+          <button class="btn" onclick="applyFilterPreset('sepia')">セピア</button>
+          <button class="btn" onclick="applyFilterPreset('mosaic')">モザイク</button>
+        </div>
+
+        <h4>その他</h4>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <label>幅 <input id="canvasW" type="number" value="800" style="width:90px"></label>
+          <label>高さ <input id="canvasH" type="number" value="600" style="width:90px"></label>
+          <button class="btn" onclick="resizeCanvasToInputs()">リサイズ</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* Editor state */
+let editor = {
+  canvases: [], wrap: null, activeLayer: -1, tool:'pen', penColor:'#ff0000', penSize:4,
+  stampImage:null, cropRect:null, undoStack:[], redoStack:[], width:800, height:600
+};
+
+function initEditorApp(){
+  editor.wrap = document.getElementById('canvasWrap');
+  if(!editor.wrap) return;
+  if(editor.wrap.querySelector('canvas')) return;
+  editor.width = parseInt(document.getElementById('canvasW').value,10) || 800;
+  editor.height = parseInt(document.getElementById('canvasH').value,10) || 600;
+  editor.wrap.style.width = editor.width + 'px'; editor.wrap.style.height = editor.height + 'px';
+  createBaseLayer();
+  const f = document.getElementById('imgFile'); if(f){ f.onchange = ()=>{ const file=f.files[0]; if(!file) return; const img=new Image(); img.onload=()=>addImageAsLayer(img); img.src=URL.createObjectURL(file); f.value=''; }; }
+  document.getElementById('editorTool').onchange = (e)=> editor.tool = e.target.value;
+  document.getElementById('penColor').oninput = (e)=> editor.penColor = e.target.value;
+  document.getElementById('penSize').oninput = (e)=> editor.penSize = parseInt(e.target.value,10) || 4;
+  renderLayersPanel(); attachEditorPointerEvents(); pushEditorHistory();
+}
+
+function createBaseLayer(){
+  editor.wrap.innerHTML = ''; editor.canvases = []; editor.width = parseInt(document.getElementById('canvasW').value,10) || editor.width; editor.height = parseInt(document.getElementById('canvasH').value,10) || editor.height;
+  createLayer('Base', true); createLayer('Paint', false); editor.activeLayer = editor.canvases.length-1; reorderLayerDOM(); renderLayersPanel();
+}
+function createLayer(name,isBase=false){ const c=document.createElement('canvas'); c.width=editor.width; c.height=editor.height; c.style.position='absolute'; c.style.left='0'; c.style.top='0'; c.style.background='transparent'; editor.wrap.appendChild(c); const ctx=c.getContext('2d'); const layer={canvas:c,ctx:ctx,name:name,visible:true,opacity:1,isBase:isBase}; editor.canvases.push(layer); reorderLayerDOM(); return layer; }
+function editorNewLayer(){ const layer=createLayer('Layer'+(editor.canvases.length+1), false); editor.activeLayer = editor.canvases.indexOf(layer); renderLayersPanel(); pushEditorHistory(); }
+function addImageAsLayer(img){ const ly=createLayer('Image'+(editor.canvases.length+1), false); ly.ctx.drawImage(img,0,0,editor.width,editor.height); editor.activeLayer = editor.canvases.indexOf(ly); renderLayersPanel(); pushEditorHistory(); redrawAll(); }
+function editorAddLayerFromFile(){ const f=document.getElementById('imgFile'); if(!f || !f.files.length) return alert('画像を選択'); const file=f.files[0]; const img=new Image(); img.onload=()=>addImageAsLayer(img); img.src=URL.createObjectURL(file); f.value=''; }
+
+function reorderLayerDOM(){ editor.wrap.innerHTML=''; editor.canvases.forEach((ly,idx)=>{ ly.canvas.style.zIndex = idx; ly.canvas.style.opacity = ly.opacity; ly.canvas.style.display = ly.visible ? 'block' : 'none'; editor.wrap.appendChild(ly.canvas); }); }
+function renderLayersPanel(){ const p=document.getElementById('layersPanel'); if(!p) return; p.innerHTML=''; for(let i=editor.canvases.length-1;i>=0;i--){ const ly=editor.canvases[i]; const div=document.createElement('div'); div.className='layer-item'; const left=document.createElement('div'); left.innerHTML=`<input type="checkbox" ${ly.visible?'checked':''} onchange="toggleLayerVisible(${i}, this.checked)"> <b>${ly.name}</b>`; const right=document.createElement('div'); right.innerHTML=`<input type="range" min="0" max="1" step="0.01" value="${ly.opacity}" onchange="setLayerOpacity(${i}, this.value)"> <button class="btn" onclick="selectLayer(${i})">選択</button> <button class="btn" onclick="removeLayer(${i})">削除</button>`; div.appendChild(left); div.appendChild(right); p.appendChild(div); } }
+function toggleLayerVisible(i,val){ editor.canvases[i].visible=val; reorderLayerDOM(); redrawAll(); }
+function setLayerOpacity(i,val){ editor.canvases[i].opacity=parseFloat(val); reorderLayerDOM(); }
+function selectLayer(i){ editor.activeLayer = i; renderLayersPanel(); }
+function removeLayer(i){ if(!confirm('レイヤーを削除しますか？')) return; const ly=editor.canvases[i]; editor.wrap.removeChild(ly.canvas); editor.canvases.splice(i,1); editor.activeLayer = Math.max(0, editor.canvases.length-1); renderLayersPanel(); pushEditorHistory(); }
+
+function attachEditorPointerEvents(){
+  let drawing=false, lastX=0, lastY=0;
+  const wrap = editor.wrap;
+  function posFromEvent(e){
+    const rect = wrap.getBoundingClientRect();
+    const clientX = (e.touches ? e.touches[0].clientX : e.clientX);
+    const clientY = (e.touches ? e.touches[0].clientY : e.clientY);
+    const x = (clientX - rect.left) * (editor.width / rect.width);
+    const y = (clientY - rect.top) * (editor.height / rect.height);
+    return {x,y};
+  }
+  wrap.onpointerdown = (e)=>{ if(editor.activeLayer<0) return; drawing=true; const p=posFromEvent(e); lastX=p.x; lastY=p.y; if(editor.tool==='pen'||editor.tool==='eraser'){ const ly=editor.canvases[editor.activeLayer]; ly.ctx.beginPath(); ly.ctx.moveTo(lastX,lastY); } if(editor.tool==='stamp' && editor.stampImage){ const ly=editor.canvases[editor.activeLayer]; const s=editor.stampImage; ly.ctx.drawImage(s,lastX - s.width/2, lastY - s.height/2); pushEditorHistory(); } if(editor.tool==='crop'){ editor.cropRect={x:p.x,y:p.y,w:0,h:0}; } };
+  wrap.onpointermove = (e)=>{ if(!drawing){ if(editor.tool==='crop'&&editor.cropRect){ const p=posFromEvent(e); editor.cropRect.w = p.x - editor.cropRect.x; editor.cropRect.h = p.y - editor.cropRect.y; redrawAll(); drawCropRectPreview(); } return; } const p=posFromEvent(e); if(editor.tool==='pen'){ const ly=editor.canvases[editor.activeLayer]; ly.ctx.lineCap='round'; ly.ctx.lineJoin='round'; ly.ctx.strokeStyle=editor.penColor; ly.ctx.lineWidth=editor.penSize; ly.ctx.beginPath(); ly.ctx.moveTo(lastX,lastY); ly.ctx.lineTo(p.x,p.y); ly.ctx.stroke(); lastX=p.x; lastY=p.y; } else if(editor.tool==='eraser'){ const ly=editor.canvases[editor.activeLayer]; ly.ctx.clearRect(p.x - editor.penSize, p.y - editor.penSize, editor.penSize*2, editor.penSize*2); lastX=p.x; lastY=p.y; } else if(editor.tool==='crop'){ editor.cropRect.w = p.x - editor.cropRect.x; editor.cropRect.h = p.y - editor.cropRect.y; redrawAll(); drawCropRectPreview(); } };
+  wrap.onpointerup = (e)=>{ drawing=false; if(editor.tool!=='crop') pushEditorHistory(); };
+}
+
+function drawCropRectPreview(){ if(!editor.cropRect) return; redrawAll(); const top=editor.canvases[editor.activeLayer]; const ctx=top.ctx; ctx.save(); ctx.strokeStyle='yellow'; ctx.lineWidth=2; ctx.setLineDash([6,4]); ctx.strokeRect(editor.cropRect.x, editor.cropRect.y, editor.cropRect.w, editor.cropRect.h); ctx.restore(); }
+function redrawAll(){ reorderLayerDOM(); }
+
+function applyRotate(deg){ const w=editor.width,h=editor.height; const radians = deg*Math.PI/180; const newW = Math.abs(Math.round(w*Math.cos(radians)+h*Math.sin(radians))); const newH = Math.abs(Math.round(h*Math.cos(radians)+w*Math.sin(radians))); const newList = []; editor.canvases.forEach(ly=>{ const tmp=document.createElement('canvas'); tmp.width=newW; tmp.height=newH; const tctx=tmp.getContext('2d'); tctx.translate(newW/2,newH/2); tctx.rotate(radians); tctx.drawImage(ly.canvas,-w/2,-h/2); newList.push({canvas:tmp,ctx:tctx,name:ly.name,visible:ly.visible,opacity:ly.opacity,isBase:ly.isBase}); }); editor.wrap.innerHTML=''; editor.canvases=[]; editor.width=newW; editor.height=newH; newList.forEach(nl=>{ nl.canvas.style.position='absolute'; nl.canvas.style.left='0'; nl.canvas.style.top='0'; editor.wrap.appendChild(nl.canvas); editor.canvases.push({canvas:nl.canvas,ctx:nl.ctx,name:nl.name,visible:nl.visible,opacity:nl.opacity,isBase:nl.isBase}); }); document.getElementById('canvasW').value = editor.width; document.getElementById('canvasH').value = editor.height; renderLayersPanel(); pushEditorHistory(); }
+
+function applyFlip(dir){ editor.canvases.forEach(ly=>{ const tmp=document.createElement('canvas'); tmp.width=ly.canvas.width; tmp.height=ly.canvas.height; const tctx=tmp.getContext('2d'); tctx.save(); if(dir==='h'){ tctx.translate(tmp.width,0); tctx.scale(-1,1); } else { tctx.translate(0,tmp.height); tctx.scale(1,-1); } tctx.drawImage(ly.canvas,0,0); tctx.restore(); ly.ctx.clearRect(0,0,ly.canvas.width,ly.canvas.height); ly.ctx.drawImage(tmp,0,0); }); pushEditorHistory(); }
+
+function applyCrop(){ if(!editor.cropRect) return alert('切り抜き範囲を指定してください（Cropツール）'); const r=editor.cropRect; const newW=Math.abs(Math.round(r.w)); const newH=Math.abs(Math.round(r.h)); const newCanv=[]; editor.canvases.forEach(ly=>{ const tmp=document.createElement('canvas'); tmp.width=newW; tmp.height=newH; const tctx=tmp.getContext('2d'); tctx.drawImage(ly.canvas, r.x, r.y, r.w, r.h, 0,0,newW,newH); newCanv.push({canvas:tmp,ctx:tctx,name:ly.name,visible:ly.visible,opacity:ly.opacity,isBase:ly.isBase}); }); editor.wrap.innerHTML=''; editor.canvases=[]; editor.width=newW; editor.height=newH; newCanv.forEach(nc=>{ nc.canvas.style.position='absolute'; nc.canvas.style.left='0'; nc.canvas.style.top='0'; editor.wrap.appendChild(nc.canvas); editor.canvases.push({canvas:nc.canvas,ctx:nc.ctx,name:nc.name,visible:nc.visible,opacity:nc.opacity,isBase:nc.isBase}); }); editor.cropRect=null; document.getElementById('canvasW').value = editor.width; document.getElementById('canvasH').value = editor.height; renderLayersPanel(); pushEditorHistory(); }
+
+function applyQC(){ const brightness=parseInt(document.getElementById('brightness').value,10)||0; const contrast=parseInt(document.getElementById('contrast').value,10)||0; const blur=parseInt(document.getElementById('blur').value,10)||0; const sharpen=parseInt(document.getElementById('sharpen').value,10)||0; const comp=document.createElement('canvas'); comp.width=editor.width; comp.height=editor.height; const cctx=comp.getContext('2d'); editor.canvases.forEach(ly=>{ if(!ly.visible) return; cctx.globalAlpha = ly.opacity; cctx.drawImage(ly.canvas,0,0); }); let imgd = cctx.getImageData(0,0,comp.width,comp.height); let data = imgd.data; const factor = (259*(contrast + 255))/(255*(259 - contrast)); for(let i=0;i<data.length;i+=4){ data[i] = clampColor(factor*(data[i]-128)+128 + brightness); data[i+1] = clampColor(factor*(data[i+1]-128)+128 + brightness); data[i+2] = clampColor(factor*(data[i+2]-128)+128 + brightness); } if(blur>0) imgd = boxBlur(imgd, blur); if(sharpen>0) imgd = sharpenFilter(imgd, sharpen); cctx.putImageData(imgd,0,0); const tmpLayer = createLayer('Filtered', false); tmpLayer.ctx.clearRect(0,0,tmpLayer.canvas.width,tmpLayer.canvas.height); tmpLayer.ctx.drawImage(comp,0,0); pushEditorHistory(); }
+function clampColor(v){ return Math.max(0, Math.min(255, Math.round(v))); }
+function boxBlur(imgd, radius){ let src=imgd; const w=imgd.width,h=imgd.height; for(let pass=0; pass<radius; pass++){ const tmp=new ImageData(w,h); for(let y=0;y<h;y++){ for(let x=0;x<w;x++){ let r=0,g=0,b=0,a=0,cnt=0; for(let oy=-1;oy<=1;oy++){ for(let ox=-1;ox<=1;ox++){ const nx=x+ox, ny=y+oy; if(nx>=0&&ny>=0&&nx<w&&ny<h){ const idx=(ny*w+nx)*4; r+=src.data[idx]; g+=src.data[idx+1]; b+=src.data[idx+2]; a+=src.data[idx+3]; cnt++; } } } const idx2=(y*w+x)*4; tmp.data[idx2]=r/cnt; tmp.data[idx2+1]=g/cnt; tmp.data[idx2+2]=b/cnt; tmp.data[idx2+3]=a/cnt; } } src=tmp; } return src; }
+function sharpenFilter(imgd, amount){ const blurred = boxBlur(imgd,1); const w=imgd.width; const out = new ImageData(w,imgd.height); for(let i=0;i<imgd.data.length;i+=4){ for(let k=0;k<3;k++){ const orig = imgd.data[i+k]; const blurv = blurred.data[i+k]; const val = orig + (orig - blurv) * amount; out.data[i+k] = clampColor(val); } out.data[i+3] = imgd.data[i+3]; } return out; }
+
+function applyFilterPreset(kind){ const comp=document.createElement('canvas'); comp.width=editor.width; comp.height=editor.height; const cctx=comp.getContext('2d'); editor.canvases.forEach(ly=>{ if(!ly.visible) return; cctx.globalAlpha=ly.opacity; cctx.drawImage(ly.canvas,0,0); }); let id=cctx.getImageData(0,0,comp.width,comp.height); if(kind==='grayscale'){ for(let i=0;i<id.data.length;i+=4){ const v=Math.round((id.data[i]+id.data[i+1]+id.data[i+2])/3); id.data[i]=id.data[i+1]=id.data[i+2]=v; } const tmp=createLayer('Grayscale', false); tmp.ctx.putImageData(id,0,0); pushEditorHistory(); } else if(kind==='sepia'){ for(let i=0;i<id.data.length;i+=4){ const r=id.data[i], g=id.data[i+1], b=id.data[i+2]; id.data[i]=clampColor((r*0.393)+(g*0.769)+(b*0.189)); id.data[i+1]=clampColor((r*0.349)+(g*0.686)+(b*0.168)); id.data[i+2]=clampColor((r*0.272)+(g*0.534)+(b*0.131)); } const tmp=createLayer('Sepia', false); tmp.ctx.putImageData(id,0,0); pushEditorHistory(); } else if(kind==='mosaic'){ const small=document.createElement('canvas'); small.width=Math.max(2,Math.floor(editor.width/20)); small.height=Math.max(2,Math.floor(editor.height/20)); const sctx=small.getContext('2d'); sctx.drawImage(comp,0,0,small.width,small.height); const tmp=createLayer('Mosaic', false); tmp.ctx.imageSmoothingEnabled=false; tmp.ctx.drawImage(small,0,0,small.width,small.height,0,0,editor.width,editor.height); pushEditorHistory(); } }
+
+function resizeCanvasToInputs(){ const w=parseInt(document.getElementById('canvasW').value,10)||editor.width; const h=parseInt(document.getElementById('canvasH').value,10)||editor.height; editor.canvases.forEach(ly=>{ const tmp=document.createElement('canvas'); tmp.width=w; tmp.height=h; const tctx=tmp.getContext('2d'); tctx.drawImage(ly.canvas,0,0,ly.canvas.width,ly.canvas.height,0,0,w,h); ly.canvas.width=w; ly.canvas.height=h; ly.ctx.clearRect(0,0,w,h); ly.ctx.drawImage(tmp,0,0); }); editor.width=w; editor.height=h; pushEditorHistory(); renderLayersPanel(); }
+
+function pushEditorHistory(){ const snap = editor.canvases.map(ly=>({name:ly.name,data:ly.canvas.toDataURL(),visible:ly.visible,opacity:ly.opacity,isBase:ly.isBase})); editor.undoStack.push(snap); if(editor.undoStack.length>50) editor.undoStack.shift(); editor.redoStack=[]; }
+function editorUndo(){ if(editor.undoStack.length<=1) return alert('これ以上Undoできません'); const snap=editor.undoStack.pop(); editor.redoStack.push(snap); const prev = editor.undoStack[editor.undoStack.length-1]; restoreEditorSnapshot(prev); }
+function editorRedo(){ if(editor.redoStack.length===0) return alert('Redoできません'); const snap=editor.redoStack.pop(); editor.undoStack.push(snap); restoreEditorSnapshot(snap); }
+function restoreEditorSnapshot(snap){ editor.wrap.innerHTML=''; editor.canvases=[]; snap.forEach(s=>{ const c=document.createElement('canvas'); c.width=editor.width; c.height=editor.height; c.style.position='absolute'; c.style.left='0'; c.style.top='0'; const ctx=c.getContext('2d'); const img=new Image(); img.onload=()=>{ ctx.clearRect(0,0,c.width,c.height); ctx.drawImage(img,0,0); }; img.src=s.data; editor.wrap.appendChild(c); editor.canvases.push({canvas:c,ctx:ctx,name:s.name,visible:s.visible,opacity:s.opacity,isBase:s.isBase}); }); renderLayersPanel(); reorderLayerDOM(); }
+function editorExport(fmt){ const out=document.createElement('canvas'); out.width=editor.width; out.height=editor.height; const ctx=out.getContext('2d'); editor.canvases.forEach(ly=>{ if(!ly.visible) return; ctx.globalAlpha=ly.opacity; ctx.drawImage(ly.canvas,0,0); }); if(fmt==='png'){ const data=out.toDataURL('image/png'); const a=document.createElement('a'); a.href=data; a.download='image.png'; a.click(); } else { const data=out.toDataURL('image/jpeg',0.92); const a=document.createElement('a'); a.href=data; a.download='image.jpg'; a.click(); } }
+function addImageAsLayer(img){ const ly=createLayer('Image'+(editor.canvases.length+1), false); ly.ctx.drawImage(img,0,0,editor.width,editor.height); editor.activeLayer = editor.canvases.indexOf(ly); renderLayersPanel(); pushEditorHistory(); redrawAll(); }
+function editorAddStampImage(img){ editor.stampImage = img; }
+
+/* =========================
+   汎用 / 小さな機能（拡張子、メモ、program、camera）
+   ========================= */
+
+function changeExt(){ const fileInput=document.getElementById('fileExtInput'); const newExtElem=document.getElementById('newExt'); const newExt=newExtElem?newExtElem.value.trim():null; if(!fileInput||!fileInput.files.length) return alert('ファイルを選択してください。'); if(!newExt||!newExt.startsWith('.')) return alert('新しい拡張子はピリオドから始めてください'); const file=fileInput.files[0]; const reader=new FileReader(); reader.onload=()=>{ const blob=new Blob([reader.result],{type:file.type||'application/octet-stream'}); let base=file.name; const dot=base.lastIndexOf('.'); if(dot!==-1) base=base.substring(0,dot); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download = base + newExt; a.click(); }; reader.readAsArrayBuffer(file); }
+function loadMemo(e){ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>document.getElementById('memoArea').value = r.result; r.readAsText(f); }
+function saveMemo(){ const t=document.getElementById('memoArea').value; const b=new Blob([t],{type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='メモ.txt'; a.click(); }
+function runProgram(){ const html=document.getElementById('htmlCode').value||''; const js=document.getElementById('jsCode').value||''; const blob=new Blob([html + `<script>${js}<\/script>`],{type:'text/html'}); const iframe=document.getElementById('programResult'); iframe.src = URL.createObjectURL(blob); }
+function startCamera(){ const v=document.getElementById('cameraView'); if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return alert('カメラ利用不可'); navigator.mediaDevices.getUserMedia({video:true}).then(s=>v.srcObject=s).catch(()=>alert('カメラアクセス拒否')); }
+function takePhoto(){ const v=document.getElementById('cameraView'); if(!v.videoWidth||!v.videoHeight) return alert('カメラ映像取得不可'); const c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight; c.getContext('2d').drawImage(v,0,0); const a=document.createElement('a'); a.href=c.toDataURL('image/png'); a.download='photo.png'; a.click(); }
+function addApp(){ const input=document.getElementById('appFileInput'); if(!input.files.length) return alert('ファイルを選択してください'); const f=input.files[0]; const r=new FileReader(); r.onload=()=>{ const html=r.result; const d=document.createElement('div'); d.className='icon'; d.innerHTML=`<img src="https://cdn-icons-png.flaticon.com/512/833/833472.png"><br>${f.name}`; d.onclick=()=>{ const blob=new Blob([html],{type:'text/html'}); window.open(URL.createObjectURL(blob),'_blank'); }; desktop.appendChild(d); const saved=JSON.parse(localStorage.getItem('apps')||'[]'); saved.push(html); localStorage.setItem('apps', JSON.stringify(saved)); alert('アプリ追加'); }; r.readAsText(f); }
+
+/* =========================
+   window.onload
+   ========================= */
+window.onload = ()=>{
+  // load saved apps icons
+  const saved = JSON.parse(localStorage.getItem('apps')||'[]');
+  saved.forEach(html=>{ const d=document.createElement('div'); d.className='icon'; d.innerHTML=`<img src="https://cdn-icons-png.flaticon.com/512/833/833472.png"><br>アプリ`; d.onclick=()=>{ const blob=new Blob([html],{type:'text/html'}); window.open(URL.createObjectURL(blob), '_blank'); }; desktop.appendChild(d); });
+
+  // Ensure the sheet/editor are ready if user opens windows
+};
+
+</script>
+</body>
+</html>
