@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>簡易バイナリHexツール</title>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 20px;
+    }
+    textarea, input {
+      width: 100%;
+      margin-top: 8px;
+      font-family: monospace;
+    }
+    textarea {
+      height: 150px;
+    }
+    button {
+      margin-top: 10px;
+      padding: 6px 12px;
+    }
+  </style>
+</head>
+<body>
+
+<h2>① ファイル → Hex表示</h2>
+<input type="file" id="fileInput">
+<textarea id="hexOutput" placeholder="6B 74 6B 20 50 4B ..."></textarea>
+
+<h2>② Hex → ファイル保存</h2>
+<input type="text" id="fileName" placeholder="FAIL.TXT">
+<textarea id="hexInput" placeholder="6B 74 6B 20 50 4B ..."></textarea>
+<button id="saveBtn">ファイル保存</button>
+
+<script>
+// ファイル → HEX表示
+document.getElementById("fileInput").addEventListener("change", function () {
+  const file = this.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function () {
+    const bytes = new Uint8Array(reader.result);
+    document.getElementById("hexOutput").value = toHex(bytes);
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+// HEX文字列 → ファイル保存
+document.getElementById("saveBtn").addEventListener("click", function () {
+  const name = document.getElementById("fileName").value;
+  const hex = document.getElementById("hexInput").value;
+
+  if (!name || !hex) {
+    alert("ファイル名とHexを入力してください");
+    return;
+  }
+
+  const bytes = hexToBytes(hex);
+  const blob = new Blob([bytes], { type: "application/octet-stream" });
+
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name.toUpperCase();
+  a.click();
+
+  URL.revokeObjectURL(a.href);
+});
+
+// Uint8Array → HEX（大文字）
+function toHex(bytes) {
+  return Array.from(bytes)
+    .map(b => b.toString(16).padStart(2, "0").toUpperCase())
+    .join(" ");
+}
+
+// HEX文字列 → Uint8Array
+function hexToBytes(hex) {
+  const clean = hex.replace(/[^0-9A-Fa-f]/g, " ");
+  const parts = clean.trim().split(/\s+/);
+
+  const bytes = new Uint8Array(parts.length);
+  for (let i = 0; i < parts.length; i++) {
+    bytes[i] = parseInt(parts[i], 16);
+  }
+  return bytes;
+}
+</script>
+
+</body>
+</html>
