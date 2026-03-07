@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Viewer</title>
+
+<style>
+body{
+margin:0;
+font-family:sans-serif;
+}
+
+#topbar{
+padding:10px;
+background:#111;
+color:white;
+}
+
+iframe{
+width:100%;
+height:calc(100vh - 50px);
+border:none;
+}
+</style>
+
+</head>
+
+<body>
+
+<div id="topbar">
+<button onclick="start()">START</button>
+</div>
+
+<iframe id="frame"></iframe>
+
+<script>
+
+let wakeLock=null;
+
+async function start(){
+
+// Wake Lock
+if ('wakeLock' in navigator){
+try{
+wakeLock = await navigator.wakeLock.request('screen');
+console.log("WakeLock enabled");
+}catch(e){
+console.log(e);
+}
+}
+
+// proxy表示
+document.getElementById("frame").src =
+"https://unblocked-sites-uaex.onrender.com";
+
+}
+
+// WakeLock復帰（スマホ対策）
+document.addEventListener("visibilitychange", async ()=>{
+if(document.visibilityState==="visible" && wakeLock!==null){
+try{
+wakeLock = await navigator.wakeLock.request("screen");
+}catch(e){}
+}
+});
+
+</script>
+
+</body>
+</html>
