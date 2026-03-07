@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>API実行ツール</title>
+<style>
+body { font-family: Arial; background:#f5f5f5; padding:20px; }
+.container { background:white; padding:20px; border-radius:10px; }
+
+input, select, textarea, button {
+width:100%; margin-bottom:10px; padding:8px;
+}
+
+button { background:#0078ff; color:white; border:none; cursor:pointer; }
+button:disabled { background:#aaa; }
+
+pre {
+background:#111;
+color:#0f0;
+padding:10px;
+border-radius:5px;
+max-height:200px;
+overflow:auto;
+}
+
+/* フルスクリーン時 */
+.fullscreen {
+position:fixed !important;
+top:0;
+left:0;
+width:100vw !important;
+height:100vh !important;
+max-height:none !important;
+z-index:9999;
+border-radius:0 !important;
+}
+
+.progress-container {
+background:#ddd;
+border-radius:5px;
+overflow:hidden;
+height:15px;
+margin-bottom:10px;
+}
+
+.progress-bar {
+height:100%;
+width:0%;
+background:#28a745;
+transition:width 0.3s;
+}
+
+.spinner {
+width:16px;
+height:16px;
+border:3px solid #ccc;
+border-top:3px solid #0078ff;
+border-radius:50%;
+animation: spin 1s linear infinite;
+display:none;
+margin-left:10px;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.log {
+background:#000;
+color:#0f0;
+font-size:12px;
+padding:10px;
+border-radius:5px;
+max-height:150px;
+overflow:auto;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+<h2>API実行ツール Pro</h2>
+
+<label>URL</label>
+<input type="text" id="url">
+
+<label>メソッド</label>
+<select id="method">
+<option>GET</option>
+<option>POST</option>
+<option>PUT</option>
+<option>DELETE</option>
+<option>自動分析</option>
+</select>
+
+<div id="analysis">
+<span id="analysisText">待機中</span>
+<span class="spinner" id="spinner"></span>
+</div>
+
+<div class="progress-container">
+<div class="progress-bar" id="progressBar"></div>
+</div>
+
+<label>ヘッダー(JSON)</label>
+<textarea id="headers"></textarea>
+
+<label>Body(JSON)</label>
+<textarea id="body"></textarea>
+
+<button onclick="runAPI()">実行</button>
+<button onclick="cancelAPI()">キャンセル</button>
+<button onclick="toggleFullscreen()">フルスクリーン表示</button>
+
+<h3>リアルタイムログ</h3>
+<div class="log" id="log"></div>
+
+<h3>レスポンス</h3>
+<pre id="response"></pre>
+
+</div>
+
+<script>
+let controller = null;
+let cancelled = false;
+
+function log(message) {
+const logBox = document.getElementById("log");
+const time = new Date().toLocaleTimeString();
+logBox.innerHTML += `[${time}] ${message}<br>`;
+logBox.scrollTop = logBox.scrollHeight;
+}
+
+function setAnalysis(text) {
+document.getElementById("analysisText").textContent = text;
+}
+
+function analyzeMethod(url, bodyText) {
+let score = { GET:0, POST:0, PUT:0, DELETE:0 };
+const lowerUrl = url.toLowerCase();
+
+if (!bodyText.trim()) score.GET += 2;
+if (bodyText.trim()) score.POST += 2;
+if (lowerUrl.match(/\/\d+$/)) { score.GET++; score.PUT++; }
+if (lowerUrl.includes("delete")) score.DELETE += 3;
+if (lowerUrl.includes("update")) score.PUT += 3;
+if (lowerUrl.includes("create")) score.POST += 3;
+
+return Object.keys(score).reduce((a,b)=>score[a]>score[b]?a:b);
+}
+
+async function attemptFetch(url, method, headers, body) {
+const res = await fetch(url, {
+method,
+headers,
+body: method==="GET"?null:body,
+signal: controller.signal
+});
+const text = await res.text();
+return { status:res.status, ok:res.ok, text };
+}
+
+async function runAPI() {
+cancelled = false;
+controller = new AbortController();
+
+const url = document.getElementById("url").value;
+let method = document.getElementById("method").value;
+const headersInput = document.getElementById("headers").value;
+const bodyInput = document.getElementById("body").value;
+
+const responseBox = document.getElementById("response");
+const spinner = document.getElementById("spinner");
+const progressBar = document.getElementById("progressBar");
+const logBox = document.getElementById("log");
+
+logBox.innerHTML = "";
+responseBox.textContent = "";
+progressBar.style.width = "0%";
+spinner.style.display = "inline-block";
+setAnalysis("実行中...");
+
+let headers = {};
+if (headersInput.trim()) {
+try {
+headers = JSON.parse(headersInput);
+} catch {
+spinner.style.display="none";
+setAnalysis("ヘッダーJSONエラー");
+return;
+}
+}
+
+try {
+
+if (method !== "自動分析") {
+const result = await attemptFetch(url, method, headers, bodyInput);
+spinner.style.display="none";
+progressBar.style.width="100%";
+setAnalysis("完了");
+responseBox.textContent =
+`Method: ${method}\nStatus: ${result.status}\n\n${result.text}`;
+return;
+}
+
+const predicted = analyzeMethod(url, bodyInput);
+const methods = ["GET","POST","PUT","DELETE"];
+const ordered = [predicted, ...methods.filter(m=>m!==predicted)];
+
+for (let i=0;i<ordered.length;i++) {
+if (cancelled) return;
+
+let m = ordered[i];
+setAnalysis(m + " 試行中...");
+progressBar.style.width = ((i/ordered.length)*100) + "%";
+
+const result = await attemptFetch(url, m, headers, bodyInput);
+
+if (result.ok) {
+spinner.style.display="none";
+progressBar.style.width="100%";
+setAnalysis("成功メソッド: "+m);
+responseBox.textContent =
+`成功メソッド: ${m}\nStatus: ${result.status}\n\n${result.text}`;
+return;
+}
+}
+
+spinner.style.display="none";
+progressBar.style.width="100%";
+setAnalysis("全メソッド失敗");
+
+} catch (e) {
+if (!cancelled) setAnalysis("エラー発生");
+spinner.style.display="none";
+}
+}
+
+function cancelAPI() {
+if (controller) {
+cancelled = true;
+controller.abort();
+setAnalysis("キャンセルされました");
+document.getElementById("spinner").style.display="none";
+}
+}
+
+function toggleFullscreen() {
+const response = document.getElementById("response");
+response.classList.toggle("fullscreen");
+}
+</script>
+
+</body>
+</html>
