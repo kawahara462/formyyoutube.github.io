@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>単一HTML 実行ツール 完全版</title>
+<style>
+body{
+font-family:sans-serif;
+background:#111;
+color:white;
+text-align:center;
+}
+#drop{
+border:3px dashed #555;
+padding:40px;
+margin:20px;
+}
+button{
+padding:10px 20px;
+margin:5px;
+font-size:16px;
+}
+iframe{
+width:95%;
+height:500px;
+border:2px solid #555;
+background:white;
+}
+</style>
+</head>
+<body>
+
+<h1>単一HTML 実行ツール 完全版</h1>
+
+<div id="drop">
+HTMLと関連ファイルを<br>
+ドラッグ＆ドロップ
+</div>
+
+<div>
+<button onclick="fileInput.click()">ファイルを選択</button>
+<button onclick="folderInput.click()">フォルダを選択</button>
+</div>
+
+<input type="file" id="fileInput" multiple hidden>
+<input type="file" id="folderInput" webkitdirectory directory multiple hidden>
+
+<iframe id="viewer"></iframe>
+
+<script>
+let filesMap = {};
+
+function handleFiles(files){
+filesMap = {};
+let htmlFile = null;
+
+for(let file of files){
+let path = file.webkitRelativePath || file.name;
+path = path.split("/").pop(); // 同階層扱い
+
+if(file.name.endsWith(".html")){
+htmlFile = file;
+} else {
+filesMap[path] = URL.createObjectURL(file);
+}
+}
+
+if(!htmlFile){
+alert("HTMLファイルがありません");
+return;
+}
+
+const reader = new FileReader();
+reader.onload = function(){
+let html = reader.result;
+
+// 相対パス置換
+for(let name in filesMap){
+const regex = new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), "g");
+html = html.replace(regex, filesMap[name]);
+}
+
+document.getElementById("viewer").srcdoc = html;
+};
+
+reader.readAsText(htmlFile);
+}
+
+// ドラッグ
+const drop = document.getElementById("drop");
+
+drop.addEventListener("dragover", e=>{
+e.preventDefault();
+});
+
+drop.addEventListener("drop", e=>{
+e.preventDefault();
+handleFiles(e.dataTransfer.files);
+});
+
+// ファイル選択
+document.getElementById("fileInput").addEventListener("change", e=>{
+handleFiles(e.target.files);
+});
+
+// フォルダ選択
+document.getElementById("folderInput").addEventListener("change", e=>{
+handleFiles(e.target.files);
+});
+</script>
+
+</body>
+</html>
