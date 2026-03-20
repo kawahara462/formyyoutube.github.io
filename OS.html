@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>完全デスクトップ環境（メモ帳保存＆VAPP対応版）</title>
+<title>完全デスクトップ環境（VAPP実行対応版）</title>
 <style>
 html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 body { background-color:#0078d7; overflow:hidden; }
@@ -309,11 +309,16 @@ function openAppStore(){
     reader.onload=function(e){
       const code=e.target.result;
       const name=file.name.replace(/\.vapp$/i,'');
-      createIcon(name,50+Math.random()*400,50+Math.random()*200,()=>alert('VAPPアプリ: '+name+' 起動'), 'https://cdn-icons-png.flaticon.com/48/61/61431.png');
+      createIcon(name,50+Math.random()*400,50+Math.random()*200,()=>openVAPPApp(name,code), 'https://cdn-icons-png.flaticon.com/48/61/61431.png');
       alert('VAPPアプリ '+name+' を追加しました');
     };
     reader.readAsText(file);
   };
+}
+
+// --- VAPP実行 ---
+function openVAPPApp(name,code){
+  createWindow(name,`<textarea style="height:100%;">${code}</textarea>`,500,400);
 }
 
 // --- デスクトップアイコン ---
