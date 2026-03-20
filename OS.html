@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>完全デスクトップ環境（保存機能強化版）</title>
+<title>完全デスクトップ環境（VAPP選択ダウンロード対応）</title>
 <style>
 html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 body { background-color:#0078d7; overflow:hidden; }
@@ -101,7 +101,7 @@ function createIcon(name,x,y,onClick,imgSrc){
   document.getElementById('desktop').appendChild(icon);
 }
 
-// --- アプリ ---
+// --- メモ帳 ---
 function openNotepad(){ 
   const html=`<div>
   <textarea id="notepadArea" style="height:100%;"></textarea><br>
@@ -118,6 +118,7 @@ function openNotepad(){
   };
 }
 
+// --- PROGRAM ---
 function openProgram(){ createWindow('PROGRAM','<textarea style="height:100%;"></textarea>',500,400);}
 
 // --- シートアプリ ---
@@ -284,35 +285,53 @@ function changeExt(){
 
 // --- APPMAKER ---
 function openAppMaker(){
-  const html=`<textarea id="appCode" style="height:100%;"></textarea>
-  <button onclick="buildVAPP()">VAPPダウンロード</button>`;
-  createWindow('APPMAKER',html,500,400);
-}
-function buildVAPP(){
-  const code=document.getElementById('appCode').value;
-  const blob=new Blob([code],{type:'text/plain'});
-  const link=document.createElement('a');
-  link.href=URL.createObjectURL(blob);
-  link.download='app.vapp';
-  link.click();
+  const html=`<textarea id="appCode" style="height:80%;"></textarea><br>
+  <button onclick="buildVAPP()">VAPPダウンロード</button>
+  <input type="file" id="loadVAPP" style="display:none;" onchange="loadVAPP(event)">
+  <button onclick="document.getElementById('loadVAPP').click()">既存VAPP読み込み</button>`;
+  const win=createWindow('APPMAKER',html,500,400);
+
+  window.buildVAPP=function(){
+    const code=document.getElementById('appCode').value;
+    const blob=new Blob([code],{type:'text/plain'});
+    const link=document.createElement('a');
+    link.href=URL.createObjectURL(blob);
+    link.download='app.vapp';
+    link.click();
+  };
+
+  window.loadVAPP=function(event){
+    const file=event.target.files[0];
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=function(e){
+      document.getElementById('appCode').value=e.target.result;
+    };
+    reader.readAsText(file);
+  };
 }
 
 // --- アプリストア ---
 function openAppStore(){
   const html=`<div>
   <a href="https://github.com/kawahara462/APPS" target="_blank">公式サイトはこちら</a><br><br>
-  <button onclick="downloadSelectedApp()">選択アプリをVAPP形式でダウンロード</button>
-  <textarea id="selectedAppCode" style="height:200px;width:100%;" placeholder="ここにアプリコードを入力"></textarea>
+  <input type="file" id="vappInput" accept=".vapp"><br>
+  <button onclick="downloadVAPP()">VAPP形式でダウンロード</button>
   </div>`;
-  const win=createWindow('アプリストア',html,400,400);
-  window.downloadSelectedApp=function(){
-    const code=document.getElementById('selectedAppCode').value;
-    if(!code)return alert('コードを入力');
-    const blob=new Blob([code],{type:'text/plain'});
-    const link=document.createElement('a');
-    link.href=URL.createObjectURL(blob);
-    link.download='app.vapp';
-    link.click();
+  const win=createWindow('アプリストア',html,400,300);
+
+  window.downloadVAPP=function(){
+    const file=document.getElementById('vappInput').files[0];
+    if(!file) return alert('VAPPファイルを選択してください');
+    const reader=new FileReader();
+    reader.onload=function(e){
+      const blob=new Blob([e.target.result],{type:'text/plain'});
+      const link=document.createElement('a');
+      link.href=URL.createObjectURL(blob);
+      link.download=file.name;
+      link.click();
+    };
+    reader.readAsText(file);
   };
 }
 
