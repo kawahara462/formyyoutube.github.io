@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>完全デスクトップ環境（VAPP実行対応版）</title>
+<title>完全デスクトップ環境 VAPP実行版</title>
 <style>
 html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 body { background-color:#0078d7; overflow:hidden; }
@@ -309,6 +309,7 @@ function openAppStore(){
     reader.onload=function(e){
       const code=e.target.result;
       const name=file.name.replace(/\.vapp$/i,'');
+      // アイコン作成時に実行可能化
       createIcon(name,50+Math.random()*400,50+Math.random()*200,()=>openVAPPApp(name,code), 'https://cdn-icons-png.flaticon.com/48/61/61431.png');
       alert('VAPPアプリ '+name+' を追加しました');
     };
@@ -316,9 +317,18 @@ function openAppStore(){
   };
 }
 
-// --- VAPP実行 ---
+// --- VAPP実行（実際にJSとして動作させる） ---
 function openVAPPApp(name,code){
-  createWindow(name,`<textarea style="height:100%;">${code}</textarea>`,500,400);
+  const win=createWindow(name,'',500,400);
+  const iframe=document.createElement('iframe');
+  iframe.style.width='100%';
+  iframe.style.height='100%';
+  iframe.style.border='0';
+  win.querySelector('.window-content').appendChild(iframe);
+  // sandbox無しで安全面は自己責任
+  iframe.contentWindow.document.open();
+  iframe.contentWindow.document.write(code);
+  iframe.contentWindow.document.close();
 }
 
 // --- デスクトップアイコン ---
@@ -333,7 +343,6 @@ createIcon('カメラ',20,120,openCamera,'https://cdn-icons-png.flaticon.com/48/
 createIcon('拡張子変更',120,120,openExtChanger,'https://cdn-icons-png.flaticon.com/48/61/61430.png');
 createIcon('APPMAKER',220,120,openAppMaker,'https://cdn-icons-png.flaticon.com/48/61/61431.png');
 createIcon('アプリストア',320,120,openAppStore,'https://cdn-icons-png.flaticon.com/48/61/61432.png');
-
 </script>
 </body>
 </html>
