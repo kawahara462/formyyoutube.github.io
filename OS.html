@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>完全デスクトップ環境（シート強化版）</title>
+<title>完全デスクトップ環境（保存機能強化版）</title>
 <style>
 html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 body { background-color:#0078d7; overflow:hidden; }
@@ -102,7 +102,22 @@ function createIcon(name,x,y,onClick,imgSrc){
 }
 
 // --- アプリ ---
-function openNotepad(){ createWindow('メモ帳','<textarea style="height:100%;"></textarea>',400,300);}
+function openNotepad(){ 
+  const html=`<div>
+  <textarea id="notepadArea" style="height:100%;"></textarea><br>
+  <button onclick="saveNotepad()">TXT形式で保存</button>
+  </div>`;
+  const win=createWindow('メモ帳',html,400,300);
+  window.saveNotepad=function(){
+    const text=document.getElementById('notepadArea').value;
+    const blob=new Blob([text],{type:'text/plain'});
+    const link=document.createElement('a');
+    link.href=URL.createObjectURL(blob);
+    link.download='note.txt';
+    link.click();
+  };
+}
+
 function openProgram(){ createWindow('PROGRAM','<textarea style="height:100%;"></textarea>',500,400);}
 
 // --- シートアプリ ---
@@ -131,11 +146,9 @@ function initSheetApp(){
 
   window.addCol=function(){
     const table=win.querySelector('#sheetTable');
-    // ヘッダ追加
     const th=document.createElement('th');
     th.textContent=String.fromCharCode(65+table.rows[0].cells.length);
     table.rows[0].appendChild(th);
-    // 各行にセル追加
     for(let r=1;r<table.rows.length;r++){
       const cell=table.rows[r].insertCell(-1);
       cell.contentEditable='true';
@@ -286,7 +299,21 @@ function buildVAPP(){
 
 // --- アプリストア ---
 function openAppStore(){
-  createWindow('アプリストア','<a href="https://github.com/kawahara462/APPS" target="_blank">公式サイトはこちら</a>',300,200);
+  const html=`<div>
+  <a href="https://github.com/kawahara462/APPS" target="_blank">公式サイトはこちら</a><br><br>
+  <button onclick="downloadSelectedApp()">選択アプリをVAPP形式でダウンロード</button>
+  <textarea id="selectedAppCode" style="height:200px;width:100%;" placeholder="ここにアプリコードを入力"></textarea>
+  </div>`;
+  const win=createWindow('アプリストア',html,400,400);
+  window.downloadSelectedApp=function(){
+    const code=document.getElementById('selectedAppCode').value;
+    if(!code)return alert('コードを入力');
+    const blob=new Blob([code],{type:'text/plain'});
+    const link=document.createElement('a');
+    link.href=URL.createObjectURL(blob);
+    link.download='app.vapp';
+    link.click();
+  };
 }
 
 // --- デスクトップアイコン ---
