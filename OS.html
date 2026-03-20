@@ -1,253 +1,3 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>仮想OS — 統合 完全版（Mac風 UI）</title>
-<style>
-:root{
-  --bg:#004080;
-  --win-bg:#fff;
-  --title:#333;
-  --task:#222;
-}
-html,body{height:100%;margin:0;font-family:system-ui,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;-webkit-font-smoothing:antialiased;}
-body{background:var(--bg);overflow:hidden;color:#111;}
-.desktop{position:absolute;top:0;left:0;right:0;bottom:34px;display:flex;flex-wrap:wrap;padding:12px;gap:10px;box-sizing:border-box;}
-.icon{width:86px;text-align:center;color:#fff;cursor:pointer;user-select:none;}
-.icon img{width:48px;height:48px;}
-.taskbar{position:absolute;bottom:0;left:0;right:0;height:34px;background:var(--task);display:flex;align-items:center;padding:0 12px;box-sizing:border-box;color:#fff;}
-.task{margin-right:8px;background:#444;padding:4px 8px;border-radius:4px;cursor:pointer;user-select:none;}
-.task.app-minimized{opacity:0.55;}
-.task.app-closed{opacity:0.35;}
-.window{position:absolute;background:var(--win-bg);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.45);overflow:hidden;display:none;flex-direction:column;resize:both;}
-.titlebar{height:40px;background:linear-gradient(#f4f4f4,#e9e9e9);display:flex;align-items:center;padding:6px 12px;cursor:grab;-webkit-user-select:none;user-select:none;}
-.mac-controls{display:flex;gap:8px;margin-right:12px;}
-.mac-dot{width:14px;height:14px;border-radius:50%;display:inline-block;box-shadow:inset 0 -1px 0 rgba(0,0,0,0.1);}
-.mac-dot.close{background:#ff5f57;}
-.mac-dot.min{background:#ffbd2e;}
-.mac-dot.max{background:#28c840;}
-.title-text{flex:1;text-align:center;font-weight:600;color:#222;margin-right:36px;}
-.content{padding:10px;overflow:auto;flex:1;}
-.btn{background:#f3f3f3;border:1px solid #ddd;padding:6px 8px;border-radius:6px;cursor:pointer;}
-.btn:active{transform:translateY(1px);}
-.sheet-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;}
-.sheet-area{width:100%;height:520px;overflow:auto;border:1px solid #ccc;background:#fff;border-radius:6px;}
-table.sheet{border-collapse:collapse;min-width:800px;}
-table.sheet th, table.sheet td{border:1px solid #ddd;padding:6px;min-width:100px;height:28px;vertical-align:middle;}
-table.sheet th.header-col{background:#f6f8fa;cursor:pointer;user-select:none;}
-table.sheet th.row-header{background:#f6f8fa;cursor:pointer;user-select:none;width:40px;text-align:center;}
-td.cell{outline:none;cursor:text;}
-.selected-row td{background:#e6f3ff !important;}
-.selected-col{background:#e6f3ff !important;}
-.sheet-tabs{display:flex;gap:6px;margin-bottom:8px;align-items:center;}
-.sheet-tab{background:#f3f3f3;border:1px solid #ddd;padding:6px 10px;border-radius:6px;cursor:pointer;}
-.sheet-tab.active{background:#fff;border:1px solid #aaa;box-shadow:0 2px 6px rgba(0,0,0,0.06);}
-.img-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;}
-.canvas-wrap{position:relative;background:#333;display:flex;align-items:center;justify-content:center;height:420px;border-radius:6px;overflow:hidden;}
-.canvas-wrap canvas{position:absolute;left:0;top:0;max-width:none;}
-.layers{border:1px solid #ddd;padding:8px;background:#fafafa;height:420px;overflow:auto;border-radius:6px;}
-.layer-item{display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid #eee;}
-.flex{display:flex;gap:8px;align-items:center;}
-#multiSelectToggle.active{background:#0a84ff;color:#fff;}
-.multi-selected{outline:2px solid #38d827 !important;border-radius:2px;}
-@media(max-width:900px){
-  .window{width:calc(100% - 40px)!important;height:calc(100% - 80px)!important;left:20px!important;top:20px!important;}
-}
-</style>
-</head>
-<body>
-<div class="desktop" id="desktop"></div>
-<div class="taskbar" id="tasks"></div>
-<div id="windows"></div>
-
-<script>
-/* =========================
-   定数
-   ========================= */
-const DEFAULT_WIN_W = 1200;
-const DEFAULT_WIN_H = 700;
-
-/* =========================
-   アプリ定義
-   ========================= */
-
-function sheetContentHTML(){ return sheetHTML(); }
-function editorContentHTML(){ return editorHTML(); }
-function browserContentHTML(){ return browserHTML(); }
-
-const apps = [
-  { id:'sheetWin', icon:'https://cdn-icons-png.flaticon.com/512/2991/2991108.png', name:'シート', content: sheetContentHTML() },
-  { id:'editorWin', icon:'https://cdn-icons-png.flaticon.com/512/685/685686.png', name:'画像編集', content: editorContentHTML() },
-  { id:'browserWin', icon:'https://cdn-icons-png.flaticon.com/512/891/891175.png', name:'ブラウザ', content: browserContentHTML() },
-  { id:'extchangerWin', icon:'https://cdn-icons-png.flaticon.com/512/2089/2089679.png', name:'拡張子変更', content: `
-    <input type="file" id="fileExtInput" /><br />
-    <input type="text" id="newExt" placeholder="新しい拡張子 例:.txt" /><br />
-    <button class="btn" onclick="changeExt()">変更</button>
-  ` },
-  { id:'notepadWin', icon:'https://cdn-icons-png.flaticon.com/512/942/942748.png', name:'メモ帳', content: `
-    <textarea id="memoArea" style="width:100%; height:80%;"></textarea><br />
-    <input type="file" onchange="loadMemo(event)" /><br />
-    <button class="btn" onclick="saveMemo()">保存</button>
-  ` },
-  { id:'programWin', icon:'https://cdn-icons-png.flaticon.com/512/1006/1006555.png', name:'Program', content: `
-    <textarea id="htmlCode" placeholder="HTMLコード" style="width:100%; height:30%;"></textarea><br />
-    <textarea id="jsCode" placeholder="JavaScriptコード" style="width:100%; height:30%;"></textarea><br />
-    <iframe id="programResult" style="width:100%; height:30%; border:1px solid #ccc;"></iframe><br />
-    <button class="btn" onclick="runProgram()">実行</button>
-  ` },
-  { id:'cameraWin', icon:'https://cdn-icons-png.flaticon.com/512/685/685655.png', name:'カメラ', content: `
-    <video id="cameraView" autoplay playsinline style="width:100%;"></video><br />
-    <button class="btn" onclick="takePhoto()">撮影</button>
-  ` },
-  { id:'appmakerWin', icon:'https://cdn-icons-png.flaticon.com/512/2910/2910768.png', name:'APPMAKER', content: `
-    <textarea id="vappHTML" placeholder="HTMLコード" style="width:100%; height:30%;"></textarea><br>
-    <textarea id="vappJS" placeholder="JavaScriptコード" style="width:100%; height:30%;"></textarea><br>
-    <button class="btn" onclick="downloadVAPP()">VAPPダウンロード</button>
-  ` },
-  { id:'appstoreWin', icon:'https://cdn-icons-png.flaticon.com/512/3649/3649469.png', name:'アプリストア', content: `
-    <button class="btn" onclick="window.open('https://github.com/kawahara462/APPS','_blank')">公式サイトはこちら</button>
-    <div id="appList"></div>
-  ` },
-  { id:'jsonWin', icon:'https://cdn-icons-png.flaticon.com/512/136/136524.png', name:'JSONエディタ', content: `
-    <textarea id="jsonArea" style="width:100%;height:80%;"></textarea><br>
-    <button class="btn" onclick="formatJSON()">整形</button>
-  ` },
-  { id:'clockWin', icon:'https://cdn-icons-png.flaticon.com/512/64/64572.png', name:'時計', content: `<div id="clockDisplay" style="font-size:48px;text-align:center;"></div>` },
-  { id:'calcWin', icon:'https://cdn-icons-png.flaticon.com/512/1828/1828884.png', name:'電卓', content: `
-    <input type="text" id="calcInput" style="width:100%;"><br>
-    <button class="btn" onclick="calcResult()">計算</button><div id="calcOutput"></div>
-  ` },
-  { id:'fcalcWin', icon:'https://cdn-icons-png.flaticon.com/512/1828/1828884.png', name:'関数電卓', content: `
-    <input type="text" id="fcalcInput" style="width:100%;"><br>
-    <button class="btn" onclick="fcalcResult()">計算</button><div id="fcalcOutput"></div>
-  ` },
-  { id:'trashWin', icon:'https://cdn-icons-png.flaticon.com/512/565/565491.png', name:'ゴミ箱', content: `<div id="trashContent">ここにゴミ箱の中身を表示します。</div>` }
-];
-
-/* =========================
-   デスクトップ・ウィンドウ生成
-   ========================= */
-
-const desktop = document.getElementById('desktop');
-const windowsContainer = document.getElementById('windows');
-const tasks = document.getElementById('tasks');
-let zIndex = 100;
-
-apps.forEach(app=>{
-  // デスクトップアイコン
-  const icon = document.createElement('div'); icon.className='icon';
-  icon.innerHTML = `<img src="${app.icon}" alt="${app.name}"><br>${app.name}`;
-  icon.onclick = ()=> openWindow(app.id);
-  desktop.appendChild(icon);
-
-  // ウィンドウ
-  const win = document.createElement('div'); win.className='window'; win.id = app.id;
-  win.style.width = DEFAULT_WIN_W + 'px';
-  win.style.height = DEFAULT_WIN_H + 'px';
-  win.style.left = '80px'; win.style.top = '60px';
-  win.innerHTML = `
-    <div class="titlebar" onmousedown="startDrag(event,this)">
-      <div class="mac-controls">
-        <span class="mac-dot close" onclick="closeWindow('${app.id}')" title="閉じる"></span>
-        <span class="mac-dot min" onclick="minimizeWindow('${app.id}')" title="最小化"></span>
-        <span class="mac-dot max" onclick="maximizeWindow('${app.id}')" title="最大化/復元"></span>
-      </div>
-      <div class="title-text">${app.name}</div>
-      <div class="title-actions"></div>
-    </div>
-    <div class="content">${app.content}</div>
-  `;
-  windowsContainer.appendChild(win);
-});
-
-/* =========================
-   ウィンドウ管理
-   ========================= */
-
-function openWindow(id){
-  const win = document.getElementById(id); if(!win) return;
-  win.style.display = 'flex';
-  win.style.zIndex = ++zIndex;
-  win.dataset.minimized = '0';
-  win.dataset.closed = '0';
-
-  // タスク追加（なければ）
-  if(!tasks.querySelector(`.task[data-app="${id}"]`)){
-    const t = document.createElement('span'); t.className='task'; t.dataset.app = id; t.textContent = id.replace('Win','');
-    t.onclick = ()=> {
-      const w = document.getElementById(id);
-      if(!w) return;
-      if(w.style.display === 'none'){
-        w.style.display = 'flex';
-        w.dataset.minimized = '0';
-        w.dataset.closed = '0';
-        w.style.zIndex = ++zIndex;
-        t.classList.remove('app-minimized','app-closed');
-      } else {
-        w.style.zIndex = ++zIndex;
-      }
-    };
-    tasks.appendChild(t);
-  }
-  // app-specific init
-  if(id==='sheetWin') initSheetApp();
-  if(id==='editorWin') initEditorApp();
-  if(id==='browserWin' && browserTabs.length===0) browserNewTab();
-  if(id==='clockWin') updateClock();
-}
-
-/* close/minimize/maximize */
-function closeWindow(id){ const win=document.getElementById(id); if(!win) return; win.style.display='none'; win.dataset.closed='1'; win.dataset.minimized='0'; const t=tasks.querySelector(`.task[data-app="${id}"]`); if(t){ t.classList.remove('app-minimized'); t.classList.add('app-closed'); } }
-function minimizeWindow(id){ const win=document.getElementById(id); if(!win) return; win.style.display='none'; win.dataset.minimized='1'; win.dataset.closed='0'; const t=tasks.querySelector(`.task[data-app="${id}"]`); if(t){ t.classList.remove('app-closed'); t.classList.add('app-minimized'); } }
-function maximizeWindow(id){ const win=document.getElementById(id); if(!win) return; if(win.dataset.max==='1'){ win.style.width=(win.dataset.prevW||DEFAULT_WIN_W)+'px'; win.style.height=(win.dataset.prevH||DEFAULT_WIN_H)+'px'; win.style.left=(win.dataset.prevL||80)+'px'; win.style.top=(win.dataset.prevT||60)+'px'; win.dataset.max='0'; } else { win.dataset.prevW=parseInt(win.style.width); win.dataset.prevH=parseInt(win.style.height); win.dataset.prevL=parseInt(win.style.left); win.dataset.prevT=parseInt(win.style.top); win.style.left='20px'; win.style.top='20px'; win.style.width=(window.innerWidth-40)+'px'; win.style.height=(window.innerHeight-80)+'px'; win.dataset.max='1'; } }
-
-function startDrag(e, el){ const win=el.parentElement; e.preventDefault(); const rect=win.getBoundingClientRect(); const offsetX=e.clientX-rect.left; const offsetY=e.clientY-rect.top; function onMove(ev){ let left=ev.clientX-offsetX; let top=ev.clientY-offsetY; left=Math.max(0,Math.min(window.innerWidth-win.offsetWidth,left)); top=Math.max(0,Math.min(window.innerHeight-win.offsetHeight-34,top)); win.style.left=left+'px'; win.style.top=top+'px'; } function onUp(){ window.removeEventListener('mousemove',onMove); window.removeEventListener('mouseup',onUp); } window.addEventListener('mousemove',onMove); window.addEventListener('mouseup',onUp); }
-
-/* =========================
-   拡張機能: VAPP ダウンロード
-   ========================= */
-function downloadVAPP(){
-  const html=document.getElementById('vappHTML').value;
-  const js=document.getElementById('vappJS').value;
-  const vappBlob=new Blob([html+'\n<script>'+js+'<\/script>'],'text/plain');
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(vappBlob);
-  a.download='app.vapp';
-  a.click();
-}
-
-/* =========================
-   JSON整形
-   ========================= */
-function formatJSON(){
-  const area=document.getElementById('jsonArea');
-  try{ const obj=JSON.parse(area.value); area.value=JSON.stringify(obj,null,2); } catch(e){ alert('無効なJSON'); }
-}
-
-/* =========================
-   時計
-   ========================= */
-function updateClock(){
-  const el=document.getElementById('clockDisplay');
-  if(!el) return;
-  const d=new Date();
-  el.textContent=d.toLocaleTimeString();
-  setTimeout(updateClock,1000);
-}
-
-/* =========================
-   電卓
-   ========================= */
-function calcResult(){
-  const input=document.getElementById('calcInput').value;
-  try{ document.getElementById('calcOutput').textContent=eval(input); } catch(e){ document.getElementById('calcOutput').textContent='ERR'; }
-}
-function fcalcResult(){
-  const input=document.getElementById('fcalcInput').value;
-  try{ document.getElementById('fcalcOutput').textContent=eval(input); } catch(e){ document.getElementById('fcalcOutput').textContent='ERR'; }
-}
-
 ```html
 <!DOCTYPE html>
 <html lang="ja">
@@ -256,96 +6,21 @@ function fcalcResult(){
 <title>Virtual Web OS</title>
 
 <style>
-
-body{
-margin:0;
-background:#0b3d91;
-font-family:sans-serif;
-overflow:hidden;
-}
-
-.desktop{
-position:absolute;
-top:0;
-left:0;
-right:0;
-bottom:40px;
-display:flex;
-flex-wrap:wrap;
-padding:10px;
-gap:15px;
-}
-
-.icon{
-width:80px;
-text-align:center;
-color:white;
-cursor:pointer;
-}
-
-.icon img{
-width:48px;
-height:48px;
-}
-
-.window{
-position:absolute;
-background:white;
-border-radius:10px;
-box-shadow:0 10px 30px rgba(0,0,0,0.5);
-display:none;
-flex-direction:column;
-overflow:hidden;
-}
-
-.titlebar{
-height:40px;
-background:#eee;
-display:flex;
-align-items:center;
-padding:5px;
-cursor:grab;
-}
-
-.dot{
-width:12px;
-height:12px;
-border-radius:50%;
-margin-right:6px;
-}
-
+body{margin:0;background:#0b3d91;font-family:sans-serif;overflow:hidden;}
+.desktop{position:absolute;top:0;left:0;right:0;bottom:40px;display:flex;flex-wrap:wrap;padding:10px;gap:15px;}
+.icon{width:80px;text-align:center;color:white;cursor:pointer;}
+.icon img{width:48px;height:48px;}
+.window{position:absolute;background:white;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.5);display:none;flex-direction:column;overflow:hidden;}
+.titlebar{height:40px;background:#eee;display:flex;align-items:center;padding:5px;cursor:grab;}
+.dot{width:12px;height:12px;border-radius:50%;margin-right:6px;}
 .red{background:#ff5f57}
 .yellow{background:#ffbd2e}
 .green{background:#28c840}
-
-.content{
-flex:1;
-overflow:auto;
-padding:10px;
-}
-
-.taskbar{
-position:absolute;
-bottom:0;
-left:0;
-right:0;
-height:40px;
-background:#222;
-display:flex;
-align-items:center;
-padding:5px;
-color:white;
-}
-
+.content{flex:1;overflow:auto;padding:10px;}
+.taskbar{position:absolute;bottom:0;left:0;right:0;height:40px;background:#222;display:flex;align-items:center;padding:5px;color:white;}
 textarea{width:100%}
 table{border-collapse:collapse}
-
-td{
-border:1px solid #aaa;
-width:80px;
-height:30px;
-}
-
+td{border:1px solid #aaa;width:80px;height:30px;}
 </style>
 </head>
 
@@ -356,95 +31,54 @@ height:30px;
 <div class="taskbar">Virtual Web OS</div>
 
 <script>
-
 const desktop=document.getElementById("desktop")
 const windows=document.getElementById("windows")
-
 let z=10
 
 function createIcon(app){
-
 let icon=document.createElement("div")
 icon.className="icon"
-
-icon.innerHTML=`
-<img src="${app.icon}">
-<br>${app.name}
-`
-
+icon.innerHTML=`<img src="${app.icon}"><br>${app.name}`
 icon.onclick=()=>openApp(app.id)
-
 desktop.appendChild(icon)
-
 }
 
 function createWindow(app){
-
 let win=document.createElement("div")
 win.className="window"
 win.id=app.id
-
 win.style.width="720px"
 win.style.height="520px"
 win.style.left="120px"
 win.style.top="80px"
-
 win.innerHTML=`
-
 <div class="titlebar" onmousedown="dragStart(event,this)">
 <div class="dot red" onclick="closeWin('${app.id}')"></div>
 <div class="dot yellow" onclick="closeWin('${app.id}')"></div>
 <div class="dot green"></div>
 <div style="margin-left:10px">${app.name}</div>
 </div>
-
-<div class="content">
-${app.content}
-</div>
+<div class="content">${app.content}</div>
 `
-
 windows.appendChild(win)
-
 }
 
 function openApp(id){
-
 let w=document.getElementById(id)
 w.style.display="flex"
 w.style.zIndex=++z
-
 }
 
-function closeWin(id){
-
-document.getElementById(id).style.display="none"
-
-}
+function closeWin(id){document.getElementById(id).style.display="none"}
 
 function dragStart(e,bar){
-
 let win=bar.parentElement
-
 let ox=e.clientX-win.offsetLeft
 let oy=e.clientY-win.offsetTop
-
-function move(ev){
-
-win.style.left=(ev.clientX-ox)+"px"
-win.style.top=(ev.clientY-oy)+"px"
-
-}
-
-function stop(){
-
-document.removeEventListener("mousemove",move)
-document.removeEventListener("mouseup",stop)
-
-}
-
+function move(ev){win.style.left=(ev.clientX-ox)+"px";win.style.top=(ev.clientY-oy)+"px"}
+function stop(){document.removeEventListener("mousemove",move);document.removeEventListener("mouseup",stop)}
 document.addEventListener("mousemove",move)
 document.addEventListener("mouseup",stop)
-
 }
 
 /* ======================
@@ -453,391 +87,222 @@ document.addEventListener("mouseup",stop)
 
 const apps=[
 
-{
-id:"notepad",
-name:"メモ帳",
-icon:"https://cdn-icons-png.flaticon.com/512/942/942748.png",
-content:`
+{id:"notepad",name:"メモ帳",icon:"https://cdn-icons-png.flaticon.com/512/942/942748.png",content:`<textarea id="memo" style="height:80%"></textarea><button onclick="saveMemo()">保存</button>`},
 
-<textarea id="memo" style="height:80%"></textarea>
-<button onclick="saveMemo()">保存</button>
+{id:"program",name:"PROGRAM",icon:"https://cdn-icons-png.flaticon.com/512/1006/1006555.png",content:`HTML<textarea id="htmlCode"></textarea>JS<textarea id="jsCode"></textarea><button onclick="runProgram()">実行</button><iframe id="result" style="width:100%;height:200px"></iframe>`},
 
-`
-},
+{id:"sheet",name:"シート",icon:"https://cdn-icons-png.flaticon.com/512/2920/2920277.png",content:`<table id="sheetTable"></table><button onclick="saveSheet()">CSV保存</button>`},
 
-{
-id:"program",
-name:"PROGRAM",
-icon:"https://cdn-icons-png.flaticon.com/512/1006/1006555.png",
-content:`
+{id:"browser",name:"ブラウザ",icon:"https://cdn-icons-png.flaticon.com/512/891/891175.png",content:`<input id="url" style="width:80%"><button onclick="openURL()">開く</button><iframe id="browserFrame" style="width:100%;height:400px"></iframe>`},
 
-HTML
-<textarea id="htmlCode"></textarea>
+{id:"camera",name:"カメラ",icon:"https://cdn-icons-png.flaticon.com/512/685/655721.png",content:`<video id="video" width="400" autoplay></video><button onclick="startCamera()">開始</button><button onclick="takePhoto()">撮影</button><br><canvas id="photo" width="400" height="300"></canvas>`},
 
-JS
-<textarea id="jsCode"></textarea>
+{id:"ext",name:"拡張子変更",icon:"https://cdn-icons-png.flaticon.com/512/833/833524.png",content:`<input type="file" id="fileChange">新しい拡張子<input id="newExt"><button onclick="changeExt()">変更</button>`},
 
-<button onclick="runProgram()">実行</button>
+{id:"appmaker",name:"APPMAKER",icon:"https://cdn-icons-png.flaticon.com/512/2721/2721297.png",content:`<h3>APPMAKER</h3>アプリ名<input id="appName">HTMLコード<textarea id="appHTML" style="height:200px"></textarea><button onclick="buildApp()">VAPPビルド & ダウンロード</button>`},
 
-<iframe id="result" style="width:100%;height:200px"></iframe>
+{id:"store",name:"アプリストア",icon:"https://cdn-icons-png.flaticon.com/512/263/263142.png",content:`<h3>公式アプリ</h3><button onclick="openOfficialApps()">公式サイトはこちら</button><br><br><h3>VAPPインストール</h3><input type="file" id="appUpload"><button onclick="installVAPP()">インストール</button><div id="storeLog"></div>`},
 
-`
-},
-
-{
-id:"sheet",
-name:"シート",
-icon:"https://cdn-icons-png.flaticon.com/512/2920/2920277.png",
-content:`
-<table id="sheetTable"></table>
-<button onclick="saveSheet()">CSV保存</button>
-`
-},
-
-{
-id:"browser",
-name:"ブラウザ",
-icon:"https://cdn-icons-png.flaticon.com/512/891/891175.png",
-content:`
-
-<input id="url" style="width:80%">
-<button onclick="openURL()">開く</button>
-
-<iframe id="browserFrame" style="width:100%;height:400px"></iframe>
-
-`
-},
-
-{
-id:"camera",
-name:"カメラ",
-icon:"https://cdn-icons-png.flaticon.com/512/685/655721.png",
-content:`
-
-<video id="video" width="400" autoplay></video>
-
-<button onclick="startCamera()">開始</button>
-<button onclick="takePhoto()">撮影</button>
-
+/* ===== 新規追加 ===== */
+{id:"jsoneditor",name:"JSONエディタ",icon:"https://cdn-icons-png.flaticon.com/512/136/136524.png",content:`
+<textarea id="jsonText" style="height:80%"></textarea>
 <br>
+<button onclick="formatJSON()">整形</button>
+<button onclick="saveJSON()">保存</button>
+`},
 
-<canvas id="photo" width="400" height="300"></canvas>
+{id:"clock",name:"時計",icon:"https://cdn-icons-png.flaticon.com/512/61/61112.png",content:`<div id="clockDisplay" style="font-size:50px;text-align:center;"></div>`},
 
-`
-},
+{id:"calc",name:"電卓",icon:"https://cdn-icons-png.flaticon.com/512/1828/1828911.png",content:`
+<input id="calcInput" style="width:80%">
+<button onclick="calcResult()">=</button>
+<div id="calcOutput"></div>
+`},
 
-{
-id:"ext",
-name:"拡張子変更",
-icon:"https://cdn-icons-png.flaticon.com/512/833/833524.png",
-content:`
-
-<input type="file" id="fileChange">
-
-新しい拡張子
-<input id="newExt">
-
-<button onclick="changeExt()">変更</button>
-
-`
-},
-
-{
-id:"appmaker",
-name:"APPMAKER",
-icon:"https://cdn-icons-png.flaticon.com/512/2721/2721297.png",
-content:`
-
-<h3>APPMAKER</h3>
-
-アプリ名
-<input id="appName">
-
-HTMLコード
-<textarea id="appHTML" style="height:200px"></textarea>
-
-<button onclick="buildApp()">VAPPビルド & ダウンロード</button>
-
-`
-},
-
-{
-id:"store",
-name:"アプリストア",
-icon:"https://cdn-icons-png.flaticon.com/512/263/263142.png",
-content:`
-
-<h3>公式アプリ</h3>
-
-<button onclick="openOfficialApps()">
-公式サイトはこちら
-</button>
-
-<br><br>
-
-<h3>VAPPインストール</h3>
-
-<input type="file" id="appUpload">
-
-<button onclick="installVAPP()">インストール</button>
-
-<div id="storeLog"></div>
-
-`
-}
-
+{id:"funcalc",name:"関数電卓",icon:"https://cdn-icons-png.flaticon.com/512/181/181560.png",content:`
+<input id="funcInput" style="width:80%">
+<button onclick="funcResult()">=</button>
+<div id="funcOutput"></div>
+<p>利用例: sin(30), sqrt(16), log(10)</p>
+`}
 ]
 
-apps.forEach(app=>{
-createIcon(app)
-createWindow(app)
-})
+apps.forEach(app=>{createIcon(app);createWindow(app)})
 
 /* ======================
 メモ帳
 ====================== */
-
 function saveMemo(){
-
 let blob=new Blob([memo.value],{type:"text/plain"})
 let url=URL.createObjectURL(blob)
-
 let a=document.createElement("a")
-a.href=url
-a.download="memo.txt"
-
-document.body.appendChild(a)
-a.click()
-a.remove()
-
+a.href=url;a.download="memo.txt"
+document.body.appendChild(a);a.click();a.remove()
 URL.revokeObjectURL(url)
-
 }
 
 /* ======================
 PROGRAM
 ====================== */
-
 function runProgram(){
-
-result.srcdoc=`
-${htmlCode.value}
-<script>
-${jsCode.value}
-<\/script>
-`
-
+result.srcdoc=`${htmlCode.value}<script>${jsCode.value}<\/script>`
 }
 
 /* ======================
 シート
 ====================== */
-
 let table=document.getElementById("sheetTable")
-
 for(let y=0;y<20;y++){
-
 let tr=document.createElement("tr")
-
 for(let x=0;x<10;x++){
-
 let td=document.createElement("td")
 td.contentEditable=true
-
 tr.appendChild(td)
-
 }
-
 table.appendChild(tr)
-
 }
-
 function saveSheet(){
-
 let csv=""
-
 for(let r of table.rows){
-
 let row=[]
-
-for(let c of r.cells){
-
-row.push(c.innerText)
-
-}
-
+for(let c of r.cells){row.push(c.innerText)}
 csv+=row.join(",")+"\\n"
-
 }
-
 let blob=new Blob([csv],{type:"text/csv"})
 let url=URL.createObjectURL(blob)
-
 let a=document.createElement("a")
-
-a.href=url
-a.download="sheet.csv"
-
-document.body.appendChild(a)
-a.click()
-a.remove()
-
+a.href=url;a.download="sheet.csv"
+document.body.appendChild(a);a.click();a.remove()
 URL.revokeObjectURL(url)
-
 }
 
 /* ======================
 ブラウザ
 ====================== */
-
 function openURL(){
-
 let u=url.value
-
-if(!u.startsWith("http"))
-u="https://"+u
-
+if(!u.startsWith("http")) u="https://"+u
 browserFrame.src=u
-
 }
 
 /* ======================
 カメラ
 ====================== */
-
 function startCamera(){
-
-navigator.mediaDevices.getUserMedia({video:true})
-.then(stream=>{
-video.srcObject=stream
-})
-
+navigator.mediaDevices.getUserMedia({video:true}).then(stream=>{video.srcObject=stream})
 }
-
 function takePhoto(){
-
 let ctx=photo.getContext("2d")
 ctx.drawImage(video,0,0,400,300)
-
 }
 
 /* ======================
 拡張子変更
 ====================== */
-
 function changeExt(){
-
 let file=fileChange.files[0]
-
 let name=file.name.split(".")[0]
-
 let newName=name+"."+newExt.value
-
 let url=URL.createObjectURL(file)
-
 let a=document.createElement("a")
-
-a.href=url
-a.download=newName
-
-document.body.appendChild(a)
-a.click()
-a.remove()
-
+a.href=url;a.download=newName
+document.body.appendChild(a);a.click();a.remove()
 URL.revokeObjectURL(url)
-
 }
 
 /* ======================
 APPMAKER
 ====================== */
-
 function buildApp(){
-
 let name=document.getElementById("appName").value.trim()
-
-if(!name){
-alert("アプリ名を入力")
-return
-}
-
+if(!name){alert("アプリ名を入力");return}
 let html=document.getElementById("appHTML").value
-
-let obj={
-name:name,
-html:btoa(unescape(encodeURIComponent(html)))
-}
-
+let obj={name:name,html:btoa(unescape(encodeURIComponent(html)))}
 let blob=new Blob([JSON.stringify(obj)],{type:"application/octet-stream"})
 let url=URL.createObjectURL(blob)
-
 let a=document.createElement("a")
-a.href=url
-a.download=name+".vapp"
-
-document.body.appendChild(a)
-a.click()
-a.remove()
-
+a.href=url;a.download=name+".vapp"
+document.body.appendChild(a);a.click();a.remove()
 URL.revokeObjectURL(url)
-
 }
 
 /* ======================
 VAPPインストール
 ====================== */
-
 function installVAPP(){
-
 let file=appUpload.files[0]
-
 let reader=new FileReader()
-
 reader.onload=function(){
-
 let data=JSON.parse(reader.result)
-
 let html=decodeURIComponent(escape(atob(data.html)))
-
 let id="app"+Date.now()
-
-let app={
-id:id,
-name:data.name,
-icon:"https://cdn-icons-png.flaticon.com/512/565/565547.png",
-content:`<iframe style="width:100%;height:100%" srcdoc="${html.replace(/"/g,'&quot;')}"></iframe>`
-}
-
+let app={id:id,name:data.name,icon:"https://cdn-icons-png.flaticon.com/512/565/565547.png",content:`<iframe style="width:100%;height:100%" srcdoc="${html.replace(/"/g,'&quot;')}"></iframe>`}
 createIcon(app)
 createWindow(app)
-
 storeLog.innerHTML+="インストール成功<br>"
-
 }
-
 reader.readAsText(file)
-
 }
 
 /* ======================
 公式サイト
 ====================== */
-
 function openOfficialApps(){
+window.open("https://github.com/kawahara462/APPS","_blank")
+}
 
-window.open(
-"https://github.com/kawahara462/APPS",
-"_blank"
-)
+/* ======================
+JSONエディタ
+====================== */
+function formatJSON(){
+try{
+let obj=JSON.parse(jsonText.value)
+jsonText.value=JSON.stringify(obj,null,2)
+}catch(e){alert("不正なJSON")}
+}
+function saveJSON(){
+let blob=new Blob([jsonText.value],{type:"application/json"})
+let url=URL.createObjectURL(blob)
+let a=document.createElement("a")
+a.href=url;a.download="data.json"
+document.body.appendChild(a);a.click();a.remove()
+URL.revokeObjectURL(url)
+}
 
+/* ======================
+時計
+====================== */
+function updateClock(){
+let now=new Date()
+let s=now.getSeconds(),m=now.getMinutes(),h=now.getHours()
+clockDisplay.innerText=`${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`
+}
+setInterval(updateClock,1000)
+updateClock()
+
+/* ======================
+電卓
+====================== */
+function calcResult(){
+try{
+let res=eval(calcInput.value)
+calcOutput.innerText=res
+}catch(e){calcOutput.innerText="Error"}
+}
+
+/* ======================
+関数電卓
+====================== */
+function funcResult(){
+try{
+let input=funcInput.value
+let safe= input.replace(/[^0-9+\-*/().,a-zA-Z]/g,'')
+let res=Function('"use strict";return ('+safe+')')()
+funcOutput.innerText=res
+}catch(e){funcOutput.innerText="Error"}
 }
 
 </script>
 </body>
 </html>
 ```
-
-
-</script>
-</body>
-</html>
