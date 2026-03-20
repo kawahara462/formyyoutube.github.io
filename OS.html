@@ -1,442 +1,307 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>仮想OS — 統合 完全版（Mac風 UI）</title>
+<meta charset="UTF-8">
+<title>完全デスクトップ環境（シート強化版）</title>
 <style>
-  :root{
-    --bg:#004080;
-    --win-bg:#fff;
-    --title:#333;
-    --task:#222;
-  }
-  html,body{height:100%;margin:0;font-family:system-ui,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;-webkit-font-smoothing:antialiased;}
-  body{background:var(--bg);overflow:hidden;color:#111;}
-  .desktop{position:absolute;top:0;left:0;right:0;bottom:34px;display:flex;flex-wrap:wrap;padding:12px;gap:10px;box-sizing:border-box;}
-  .icon{width:86px;text-align:center;color:#fff;cursor:pointer;user-select:none;}
-  .icon img{width:48px;height:48px;}
-  .taskbar{position:absolute;bottom:0;left:0;right:0;height:34px;background:var(--task);display:flex;align-items:center;padding:0 12px;box-sizing:border-box;color:#fff;}
-  .task{margin-right:8px;background:#444;padding:4px 8px;border-radius:4px;cursor:pointer;user-select:none;}
-  .task.app-minimized{opacity:0.55;}
-  .task.app-closed{opacity:0.35;}
-  .window{position:absolute;background:var(--win-bg);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.45);overflow:hidden;display:none;flex-direction:column;resize:both;}
-  .titlebar{height:40px;background:linear-gradient(#f4f4f4,#e9e9e9);display:flex;align-items:center;padding:6px 12px;cursor:grab;-webkit-user-select:none;user-select:none;}
-  .mac-controls{display:flex;gap:8px;margin-right:12px;}
-  .mac-dot{width:14px;height:14px;border-radius:50%;display:inline-block;box-shadow:inset 0 -1px 0 rgba(0,0,0,0.1);}
-  .mac-dot.close{background:#ff5f57;}
-  .mac-dot.min{background:#ffbd2e;}
-  .mac-dot.max{background:#28c840;}
-  .title-text{flex:1;text-align:center;font-weight:600;color:#222;margin-right:36px;}
-  .content{padding:10px;overflow:auto;flex:1;}
-  .btn{background:#f3f3f3;border:1px solid #ddd;padding:6px 8px;border-radius:6px;cursor:pointer;}
-  .btn:active{transform:translateY(1px);}
-  .sheet-toolbar, .img-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;}
-  .sheet-area{width:100%;height:520px;overflow:auto;border:1px solid #ccc;background:#fff;border-radius:6px;}
-  table.sheet{border-collapse:collapse;min-width:800px;}
-  table.sheet th, table.sheet td{border:1px solid #ddd;padding:6px;min-width:100px;height:28px;vertical-align:middle;}
-  table.sheet th.header-col{background:#f6f8fa;cursor:pointer;user-select:none;}
-  table.sheet th.row-header{background:#f6f8fa;cursor:pointer;user-select:none;width:40px;text-align:center;}
-  td.cell{outline:none;cursor:text;}
-  .selected-row td{background:#e6f3ff !important;}
-  .selected-col{background:#e6f3ff !important;}
-  .sheet-tabs{display:flex;gap:6px;margin-bottom:8px;align-items:center;}
-  .sheet-tab{background:#f3f3f3;border:1px solid #ddd;padding:6px 10px;border-radius:6px;cursor:pointer;}
-  .sheet-tab.active{background:#fff;border:1px solid #aaa;box-shadow:0 2px 6px rgba(0,0,0,0.06);}
-  .canvas-wrap{position:relative;background:#333;display:flex;align-items:center;justify-content:center;height:420px;border-radius:6px;overflow:hidden;}
-  .canvas-wrap canvas{position:absolute;left:0;top:0;max-width:none;}
-  .layers{border:1px solid #ddd;padding:8px;background:#fafafa;height:420px;overflow:auto;border-radius:6px;}
-  .layer-item{display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid #eee;}
-  .flex{display:flex;gap:8px;align-items:center;}
-  #multiSelectToggle.active{background:#0a84ff;color:#fff;}
-  .multi-selected{outline:2px solid #38d827 !important;border-radius:2px;}
-  @media(max-width:900px){
-    .window{width:calc(100% - 40px)!important;height:calc(100% - 80px)!important;left:20px!important;top:20px!important;}
-  }
+html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
+body { background-color:#0078d7; overflow:hidden; }
+#desktop { position:relative; width:100%; height:calc(100% - 40px); }
+#taskbar { position:fixed; bottom:0; left:0; height:40px; width:100%; background-color:#333; display:flex; align-items:center; padding:0 5px; box-sizing:border-box; }
+.taskbar-button { background-color:#555; color:white; margin:0 2px; padding:5px 10px; border-radius:3px; cursor:pointer; user-select:none; }
+.icon { width:80px; text-align:center; color:white; cursor:pointer; position:absolute; user-select:none; }
+.icon img { width:48px; height:48px; }
+.window { position:absolute; background-color:#fff; border:1px solid #666; box-shadow:0 0 10px #000; min-width:300px; min-height:200px; display:flex; flex-direction:column; z-index:100; }
+.window-header { background-color:#0078d7; color:white; padding:5px; cursor:move; display:flex; justify-content:space-between; align-items:center; }
+.window-header button { background-color:red; border:none; color:white; cursor:pointer; width:20px; height:20px; }
+.window-content { flex:1; padding:5px; overflow:auto; }
+textarea, input, table { width:100%; box-sizing:border-box; }
+table { border-collapse:collapse; }
+td, th { border:1px solid #ccc; padding:2px; min-width:50px; text-align:center; }
+button { cursor:pointer; margin:2px; }
 </style>
 </head>
 <body>
-<div class="desktop" id="desktop"></div>
-<div class="taskbar" id="tasks"></div>
-<div id="windows"></div>
+<div id="desktop"></div>
+<div id="taskbar"></div>
+<div id="windowsContainer"></div>
 
 <script>
-/* =========================
-   定数
-   ========================= */
-const DEFAULT_WIN_W = 1200;
-const DEFAULT_WIN_H = 700;
+let zIndexCounter = 101;
 
-/* =========================
-   アプリコンテンツプレースホルダ
-   ========================= */
-function sheetContentHTML(){ return sheetHTML(); }
-function editorContentHTML(){ return editorHTML(); }
-function browserContentHTML(){ return browserHTML(); }
-function jsonContentHTML(){ return jsonHTML(); }
-function clockContentHTML(){ return clockHTML(); }
-function calcContentHTML(){ return calcHTML(); }
-function funcCalcContentHTML(){ return funcCalcHTML(); }
-function appMakerContentHTML(){ return appMakerHTML(); }
+// --- ウィンドウ管理 ---
+function createWindow(title, contentHTML, width=400, height=300){
+  const win=document.createElement('div');
+  win.className='window';
+  win.style.width=width+'px';
+  win.style.height=height+'px';
+  win.style.left='50px';
+  win.style.top='50px';
+  win.style.zIndex=zIndexCounter++;
 
-/* =========================
-   アプリ定義
-   ========================= */
-const apps = [
-  { id:'sheetWin', icon:'https://cdn-icons-png.flaticon.com/512/2991/2991108.png', name:'シート', content: sheetContentHTML() },
-  { id:'editorWin', icon:'https://cdn-icons-png.flaticon.com/512/685/685686.png', name:'画像編集', content: editorContentHTML() },
-  { id:'browserWin', icon:'https://cdn-icons-png.flaticon.com/512/891/891175.png', name:'ブラウザ', content: browserContentHTML() },
-  { id:'extchangerWin', icon:'https://cdn-icons-png.flaticon.com/512/2089/2089679.png', name:'拡張子変更', content: `
-    <input type="file" id="fileExtInput" /><br />
-    <input type="text" id="newExt" placeholder="新しい拡張子 例:.txt" /><br />
-    <button class="btn" onclick="changeExt()">変更</button>
-  ` },
-  { id:'notepadWin', icon:'https://cdn-icons-png.flaticon.com/512/942/942748.png', name:'メモ帳', content: `
-    <textarea id="memoArea" style="width:100%; height:80%;"></textarea><br />
-    <input type="file" onchange="loadMemo(event)" /><br />
-    <button class="btn" onclick="saveMemo()">保存</button>
-  ` },
-  { id:'programWin', icon:'https://cdn-icons-png.flaticon.com/512/1006/1006555.png', name:'Program', content: `
-    <textarea id="htmlCode" placeholder="HTMLコード" style="width:100%; height:30%;"></textarea><br />
-    <textarea id="jsCode" placeholder="JavaScriptコード" style="width:100%; height:30%;"></textarea><br />
-    <iframe id="programResult" style="width:100%; height:30%; border:1px solid #ccc;"></iframe><br />
-    <button class="btn" onclick="runProgram()">実行</button>
-  ` },
-  { id:'cameraWin', icon:'https://cdn-icons-png.flaticon.com/512/685/685655.png', name:'カメラ', content: `
-    <video id="cameraView" autoplay playsinline style="width:100%;"></video><br />
-    <button class="btn" onclick="takePhoto()">撮影</button>
-  ` },
-  { id:'appstoreWin', icon:'https://cdn-icons-png.flaticon.com/512/3649/3649469.png', name:'アプリストア', content: `
-    <div>
-      <button class="btn" onclick="openOfficialApps()">公式アプリはこちら</button>
-      <input type="file" id="appFileInput" accept=".vapp" /><br/>
-      <button class="btn" onclick="addApp()">追加</button>
-      <div id="appList"></div>
-    </div>
-  ` },
-];
+  const header=document.createElement('div');
+  header.className='window-header';
+  header.innerHTML=`<span>${title}</span>`;
+  const closeBtn=document.createElement('button');
+  closeBtn.textContent='×';
+  closeBtn.onclick=()=>{win.remove(); removeTaskbar(title);};
+  header.appendChild(closeBtn);
+  win.appendChild(header);
 
-/* =========================
-   デスクトップとウィンドウ生成
-   ========================= */
-const desktop = document.getElementById('desktop');
-const windowsContainer = document.getElementById('windows');
-const tasks = document.getElementById('tasks');
-let zIndex = 100;
+  const content=document.createElement('div');
+  content.className='window-content';
+  content.innerHTML=contentHTML;
+  win.appendChild(content);
 
-apps.forEach(app=>{
-  // デスクトップアイコン
-  const icon = document.createElement('div'); icon.className='icon';
-  icon.innerHTML = `<img src="${app.icon}" alt="${app.name}"><br>${app.name}`;
-  icon.onclick = ()=> openWindow(app.id);
-  desktop.appendChild(icon);
-
-  // ウィンドウ
-  const win = document.createElement('div'); win.className='window'; win.id = app.id;
-  win.style.width = DEFAULT_WIN_W + 'px';
-  win.style.height = DEFAULT_WIN_H + 'px';
-  win.style.left = '80px'; win.style.top = '60px';
-  win.innerHTML = `
-    <div class="titlebar" onmousedown="startDrag(event,this)">
-      <div class="mac-controls" style="margin-right:8px;">
-        <span class="mac-dot close" onclick="closeWindow('${app.id}')" title="閉じる"></span>
-        <span class="mac-dot min" onclick="minimizeWindow('${app.id}')" title="最小化"></span>
-        <span class="mac-dot max" onclick="maximizeWindow('${app.id}')" title="最大化/復元"></span>
-      </div>
-      <div class="title-text">${app.name}</div>
-      <div class="title-actions"></div>
-    </div>
-    <div class="content">${app.content}</div>
-  `;
-  windowsContainer.appendChild(win);
-});
-
-/* =========================
-   ウィンドウ操作
-   ========================= */
-function openWindow(id){
-  const win = document.getElementById(id); if(!win) return;
-  win.style.display = 'flex';
-  win.style.zIndex = ++zIndex;
-  win.dataset.minimized = '0';
-  win.dataset.closed = '0';
-  if(!tasks.querySelector(`.task[data-app="${id}"]`)){
-    const t = document.createElement('span'); t.className='task'; t.dataset.app = id; t.textContent = id.replace('Win','');
-    t.onclick = ()=> {
-      const w = document.getElementById(id);
-      if(!w) return;
-      if(w.style.display === 'none'){ w.style.display='flex'; w.dataset.minimized='0'; w.dataset.closed='0'; w.style.zIndex=++zIndex; t.classList.remove('app-minimized','app-closed'); }
-      else { w.style.zIndex=++zIndex; }
-    };
-    tasks.appendChild(t);
-  }
-  // app-specific init
-  if(id==='sheetWin') initSheetApp();
-}
-function closeWindow(id){ const win=document.getElementById(id); if(!win) return; win.style.display='none'; win.dataset.closed='1'; win.dataset.minimized='0'; const t=tasks.querySelector(`.task[data-app="${id}"]`); if(t){ t.classList.remove('app-minimized'); t.classList.add('app-closed'); } }
-function minimizeWindow(id){ const win=document.getElementById(id); if(!win) return; win.style.display='none'; win.dataset.minimized='1'; win.dataset.closed='0'; const t=tasks.querySelector(`.task[data-app="${id}"]`); if(t){ t.classList.remove('app-closed'); t.classList.add('app-minimized'); } }
-function maximizeWindow(id){ const win=document.getElementById(id); if(!win) return; if(win.dataset.max==='1'){ win.style.width=(win.dataset.prevW||DEFAULT_WIN_W)+'px'; win.style.height=(win.dataset.prevH||DEFAULT_WIN_H)+'px'; win.style.left=(win.dataset.prevL||80)+'px'; win.style.top=(win.dataset.prevT||60)+'px'; win.dataset.max='0'; } else { win.dataset.prevW=parseInt(win.style.width); win.dataset.prevH=parseInt(win.style.height); win.dataset.prevL=parseInt(win.style.left); win.dataset.prevT=parseInt(win.style.top); win.style.left='20px'; win.style.top='20px'; win.style.width=(window.innerWidth-40)+'px'; win.style.height=(window.innerHeight-80)+'px'; win.dataset.max='1'; } }
-function focusWindow(id){ const win=document.getElementById(id); if(!win) return; win.style.display='flex'; win.style.zIndex=++zIndex; win.dataset.minimized='0'; win.dataset.closed='0'; const t = tasks.querySelector(`.task[data-app="${id}"]`); if(t) t.classList.remove('app-minimized','app-closed'); }
-
-/* =========================
-   ウィンドウドラッグ
-   ========================= */
-function startDrag(e, el){
-  const win = el.parentElement;
-  e.preventDefault();
-  const rect = win.getBoundingClientRect();
-  const offsetX = e.clientX - rect.left;
-  const offsetY = e.clientY - rect.top;
-  function onMove(ev){
-    let left = ev.clientX - offsetX;
-    let top = ev.clientY - offsetY;
-    left = Math.max(0, Math.min(window.innerWidth - win.offsetWidth, left));
-    top = Math.max(0, Math.min(window.innerHeight - win.offsetHeight - 34, top));
-    win.style.left = left + 'px'; win.style.top = top + 'px';
-  }
-  function onUp(){ window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); }
-  window.addEventListener('mousemove', onMove);
-  window.addEventListener('mouseup', onUp);
-}
-
-/* =========================
-   ブラウザ簡易
-   ========================= */
-function browserHTML(){
-  return `
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-      <button class="btn" onclick="browserNewTab()">＋ 新しいタブ</button>
-      <button class="btn" onclick="browserShowURLPrompt()">開く</button>
-      <input id="browserURL" style="flex:1;padding:6px;border:1px solid #ccc;border-radius:6px;" placeholder="URLを入力">
-    </div>
-    <div class="browser-tabs" id="browserTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;"></div>
-    <iframe id="browserView" style="width:100%;height:580px;border:1px solid #ccc;border-radius:6px;"></iframe>
-  `;
-}
-const browserTabs=[]; let browserActiveTab=-1;
-function browserRenderTabs(){ const area=document.getElementById('browserTabs'); if(!area) return; area.innerHTML=''; browserTabs.forEach((t,i)=>{ const b=document.createElement('div'); b.className='sheet-tab'+(i===browserActiveTab?' active':''); b.textContent=t.title||t.url; const x=document.createElement('span'); x.textContent=' ×'; x.style.marginLeft='6px'; x.style.cursor='pointer'; x.onclick=(e)=>{ e.stopPropagation(); browserCloseTab(i); }; b.onclick=()=>browserSwitchTab(i); b.appendChild(x); area.appendChild(b); }); }
-function browserNewTab(url){ url = url || 'https://unblocked-sites-uaex.onrender.com/'; browserTabs.push({title:'新しいタブ',url}); browserActiveTab=browserTabs.length-1; browserSwitchTab(browserActiveTab); }
-function browserSwitchTab(i){ browserActiveTab=i; const iframe=document.getElementById('browserView'); iframe.src=browserTabs[i].url; const urlInput=document.getElementById('browserURL'); if(urlInput) urlInput.value=browserTabs[i].url; browserRenderTabs(); }
-function browserCloseTab(i){ browserTabs.splice(i,1); if(browserActiveTab>=browserTabs.length) browserActiveTab=browserTabs.length-1; if(browserTabs.length===0){ document.getElementById('browserView').src=''; browserActiveTab=-1; } else browserSwitchTab(browserActiveTab); }
-function browserShowURLPrompt(){ const u=document.getElementById('browserURL').value.trim(); if(!u) return alert('URLを入力してください'); if(browserActiveTab===-1) browserNewTab(u); else { browserTabs[browserActiveTab].url=u; browserSwitchTab(browserActiveTab); } }
-
-</script><script>
-/* =========================
-   メモ帳補助
-   ========================= */
-function saveMemo(){
-  const val=document.getElementById('memoArea').value;
-  const blob=new Blob([val],{type:'text/plain'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='memo.txt'; a.click();
-}
-function loadMemo(e){
-  const file=e.target.files[0]; if(!file) return;
-  const reader=new FileReader();
-  reader.onload=function(ev){ document.getElementById('memoArea').value=ev.target.result; };
-  reader.readAsText(file);
-}
-
-/* =========================
-   拡張子変更
-   ========================= */
-function changeExt(){
-  const file=document.getElementById('fileExtInput').files[0];
-  if(!file){ alert('ファイルを選択してください'); return; }
-  let newExt=document.getElementById('newExt').value.trim();
-  if(!newExt.startsWith('.')) newExt='.'+newExt;
-  const name=file.name.replace(/\.[^/.]+$/,newExt);
-  const a=document.createElement('a'); a.href=URL.createObjectURL(file); a.download=name; a.click();
-}
-
-/* =========================
-   Program実行
-   ========================= */
-function runProgram(){
-  const html=document.getElementById('htmlCode').value;
-  const js=document.getElementById('jsCode').value;
-  const iframe=document.getElementById('programResult');
-  iframe.srcdoc=html+'<script>'+js+'<\/script>';
-}
-
-/* =========================
-   Camera
-   ========================= */
-async function takePhoto(){
-  const video=document.getElementById('cameraView');
-  if(!video.srcObject){ 
-    try{
-      const stream=await navigator.mediaDevices.getUserMedia({video:true});
-      video.srcObject=stream;
-      return;
-    }catch(e){ alert('カメラにアクセスできません'); return; }
-  }
-  const canvas=document.createElement('canvas'); canvas.width=video.videoWidth; canvas.height=video.videoHeight;
-  canvas.getContext('2d').drawImage(video,0,0);
-  const a=document.createElement('a'); a.href=canvas.toDataURL('image/png'); a.download='photo.png'; a.click();
-}
-
-/* =========================
-   アプリストア
-   ========================= */
-function openOfficialApps(){ window.open('https://github.com/kawahara462/APPS','_blank'); }
-function addApp(){
-  const file=document.getElementById('appFileInput').files[0]; if(!file) return alert('VAPPファイルを選択');
-  const reader=new FileReader();
-  reader.onload=function(e){
-    const data=e.target.result;
-    try{
-      const app=JSON.parse(data); 
-      if(!app.name||!app.content) throw '不正な形式';
-      const id='userApp'+Date.now();
-      const newApp={id, icon: app.icon||'https://cdn-icons-png.flaticon.com/512/565/565547.png', name: app.name, content: app.content};
-      apps.push(newApp);
-      const icon=document.createElement('div'); icon.className='icon'; icon.innerHTML=`<img src="${newApp.icon}"><br>${newApp.name}`;
-      icon.onclick=()=>openWindow(newApp.id);
-      desktop.appendChild(icon);
-      const win=document.createElement('div'); win.className='window'; win.id=newApp.id;
-      win.style.width=DEFAULT_WIN_W+'px'; win.style.height=DEFAULT_WIN_H+'px'; win.style.left='80px'; win.style.top='60px';
-      win.innerHTML=`
-        <div class="titlebar" onmousedown="startDrag(event,this)">
-          <div class="mac-controls">
-            <span class="mac-dot close" onclick="closeWindow('${newApp.id}')"></span>
-            <span class="mac-dot min" onclick="minimizeWindow('${newApp.id}')"></span>
-            <span class="mac-dot max" onclick="maximizeWindow('${newApp.id}')"></span>
-          </div>
-          <div class="title-text">${newApp.name}</div>
-        </div>
-        <div class="content">${newApp.content}</div>
-      `;
-      windowsContainer.appendChild(win);
-      alert('アプリを追加しました');
-    }catch(e){ alert('VAPPファイルが不正です'); }
-  };
-  reader.readAsText(file);
-}
-
-/* =========================
-   シート完全版
-   ========================= */
-function sheetHTML(){ 
-  return `
-  <div class="sheet-tabs" id="sheetTabs"></div>
-  <div class="sheet-toolbar">
-    <button class="btn" onclick="addSheetTab()">＋シート</button>
-    <button class="btn" onclick="removeSheetTab()">−シート</button>
-  </div>
-  <div class="sheet-area" id="sheetArea"></div>
-  `;
-}
-
-let sheetTabs=[], currentSheet=0;
-function initSheetApp(){ 
-  if(sheetTabs.length===0) addSheetTab();
-}
-function addSheetTab(){
-  const id='sheet'+Date.now();
-  const data={id,name:'Sheet'+(sheetTabs.length+1),rows:30,cols:10,values:[]};
-  for(let r=0;r<data.rows;r++){ data.values[r]=[]; for(let c=0;c<data.cols;c++) data.values[r][c]=''; }
-  sheetTabs.push(data); currentSheet=sheetTabs.length-1;
-  renderSheetTabs(); renderSheetGrid();
-}
-function removeSheetTab(){
-  if(sheetTabs.length<=1) return alert('最低1シート必要');
-  sheetTabs.splice(currentSheet,1);
-  currentSheet=Math.max(0,currentSheet-1);
-  renderSheetTabs(); renderSheetGrid();
-}
-function renderSheetTabs(){
-  const container=document.getElementById('sheetTabs');
-  container.innerHTML='';
-  sheetTabs.forEach((s,i)=>{
-    const t=document.createElement('div'); t.className='sheet-tab'+(i===currentSheet?' active':''); t.textContent=s.name;
-    t.onclick=()=>{ currentSheet=i; renderSheetTabs(); renderSheetGrid(); };
-    container.appendChild(t);
-  });
-}
-function renderSheetGrid(){
-  const area=document.getElementById('sheetArea'); area.innerHTML='';
-  const sheet=sheetTabs[currentSheet];
-  const table=document.createElement('table'); table.className='sheet';
-  const thead=document.createElement('thead'); const trh=document.createElement('tr'); trh.appendChild(document.createElement('th')); 
-  for(let c=0;c<sheet.cols;c++){ const th=document.createElement('th'); th.className='header-col'; th.textContent=String.fromCharCode(65+c); trh.appendChild(th); }
-  thead.appendChild(trh); table.appendChild(thead);
-  const tbody=document.createElement('tbody');
-  for(let r=0;r<sheet.rows;r++){
-    const tr=document.createElement('tr');
-    const rh=document.createElement('th'); rh.className='row-header'; rh.textContent=r+1; tr.appendChild(rh);
-    for(let c=0;c<sheet.cols;c++){
-      const td=document.createElement('td'); td.contentEditable=true; td.className='cell'; td.textContent=sheet.values[r][c];
-      td.oninput=function(){ sheet.values[r][c]=this.textContent; };
-      tr.appendChild(td);
+  // 移動
+  header.onmousedown=function(e){
+    let offsetX=e.clientX-win.offsetLeft;
+    let offsetY=e.clientY-win.offsetTop;
+    function moveHandler(e){
+      win.style.left=(e.clientX-offsetX)+'px';
+      win.style.top=(e.clientY-offsetY)+'px';
     }
-    tbody.appendChild(tr);
+    function upHandler(){
+      document.removeEventListener('mousemove',moveHandler);
+      document.removeEventListener('mouseup',upHandler);
+    }
+    document.addEventListener('mousemove',moveHandler);
+    document.addEventListener('mouseup',upHandler);
+  };
+
+  document.getElementById('windowsContainer').appendChild(win);
+  addTaskbar(title,win);
+  return win;
+}
+
+function addTaskbar(title,win){
+  const taskbar=document.getElementById('taskbar');
+  const btn=document.createElement('div');
+  btn.className='taskbar-button';
+  btn.textContent=title;
+  btn.onclick=()=>{win.style.zIndex=zIndexCounter++;};
+  taskbar.appendChild(btn);
+}
+
+function removeTaskbar(title){
+  const taskbar=document.getElementById('taskbar');
+  for(let btn of Array.from(taskbar.children)){
+    if(btn.textContent===title) btn.remove();
   }
-  table.appendChild(tbody); area.appendChild(table);
 }
 
-/* =========================
-   JSON記述アプリ
-   ========================= */
-function jsonHTML(){
-  return `<textarea id="jsonArea" style="width:100%; height:90%;"></textarea><br/>
-          <button class="btn" onclick="downloadJSON()">JSONを保存</button>`;
-}
-function downloadJSON(){
-  const val=document.getElementById('jsonArea').value;
-  try{ JSON.parse(val); } catch(e){ return alert('不正なJSONです'); }
-  const blob=new Blob([val],{type:'application/json'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='data.json'; a.click();
+// --- デスクトップアイコン ---
+function createIcon(name,x,y,onClick,imgSrc){
+  const icon=document.createElement('div');
+  icon.className='icon';
+  icon.style.left=x+'px';
+  icon.style.top=y+'px';
+  icon.innerHTML=`<img src="${imgSrc||'data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'48\' height=\'48\'></svg>'}"><br>${name}`;
+  icon.onclick=onClick;
+  document.getElementById('desktop').appendChild(icon);
 }
 
-/* =========================
-   時計アプリ
-   ========================= */
-function clockHTML(){ return `<div id="clockDisplay" style="font-size:36px;text-align:center;margin-top:20px;"></div>`; }
-function updateClock(){
-  const el=document.getElementById('clockDisplay'); if(!el) return;
-  const now=new Date(); el.textContent=now.toLocaleTimeString();
-}
-setInterval(updateClock,1000); updateClock();
+// --- アプリ ---
+function openNotepad(){ createWindow('メモ帳','<textarea style="height:100%;"></textarea>',400,300);}
+function openProgram(){ createWindow('PROGRAM','<textarea style="height:100%;"></textarea>',500,400);}
 
-/* =========================
-   電卓アプリ
-   ========================= */
-function calcHTML(){ return `<input type="text" id="calcInput" style="width:100%;font-size:24px;"><br/>
-  <div style="display:flex;flex-wrap:wrap;gap:4px;">
-  ${['7','8','9','/','4','5','6','*','1','2','3','-','0','.','=','+'].map(v=>`<button class="btn" onclick="calcPress('${v}')">${v}</button>`).join('')}
-  </div>`; 
-}
-function calcPress(v){
-  const inp=document.getElementById('calcInput'); if(v==='='){ try{ inp.value=eval(inp.value); }catch(e){ alert('式が不正です'); } }
-  else inp.value+=v;
+// --- シートアプリ ---
+function initSheetApp(){
+  const html=`<div>
+  <button onclick="addRow()">行追加</button>
+  <button onclick="addCol()">列追加</button>
+  <button onclick="saveSheet()">保存</button>
+  <input type="file" id="sheetLoad" style="display:none;" onchange="loadSheet(event)">
+  <button onclick="document.getElementById('sheetLoad').click()">読み込み</button>
+  <table id="sheetTable">
+    <tr><th>A</th><th>B</th><th>C</th><th>D</th></tr>
+    <tr><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+    <tr><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+  </table></div>`;
+  const win=createWindow('シート',html,600,400);
+
+  window.addRow=function(){
+    const table=win.querySelector('#sheetTable');
+    const row=table.insertRow(-1);
+    for(let i=0;i<table.rows[0].cells.length;i++){
+      const cell=row.insertCell(i);
+      cell.contentEditable='true';
+    }
+  };
+
+  window.addCol=function(){
+    const table=win.querySelector('#sheetTable');
+    // ヘッダ追加
+    const th=document.createElement('th');
+    th.textContent=String.fromCharCode(65+table.rows[0].cells.length);
+    table.rows[0].appendChild(th);
+    // 各行にセル追加
+    for(let r=1;r<table.rows.length;r++){
+      const cell=table.rows[r].insertCell(-1);
+      cell.contentEditable='true';
+    }
+  };
+
+  window.saveSheet=function(){
+    const table=win.querySelector('#sheetTable');
+    let csv='';
+    for(let r=0;r<table.rows.length;r++){
+      let row=[];
+      for(let c=0;c<table.rows[r].cells.length;c++){
+        row.push(table.rows[r].cells[c].innerText.replace(/,/g,'\\,'));
+      }
+      csv+=row.join(',')+'\n';
+    }
+    const blob=new Blob([csv],{type:'text/csv'});
+    const link=document.createElement('a');
+    link.href=URL.createObjectURL(blob);
+    link.download='sheet.csv';
+    link.click();
+  };
+
+  window.loadSheet=function(event){
+    const file=event.target.files[0];
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=function(e){
+      const lines=e.target.result.split(/\r?\n/);
+      const table=win.querySelector('#sheetTable');
+      table.innerHTML='';
+      lines.forEach((line,i)=>{
+        if(!line.trim())return;
+        const tr=document.createElement(i===0?'tr':'tr');
+        const cells=line.split(/(?<!\\),/).map(s=>s.replace(/\\,/g,','));
+        cells.forEach(c=>{
+          const cell=document.createElement(i===0?'th':'td');
+          cell.contentEditable='true';
+          cell.innerText=c;
+          tr.appendChild(cell);
+        });
+        table.appendChild(tr);
+      });
+    };
+    reader.readAsText(file);
+  };
 }
 
-/* =========================
-   関数電卓アプリ
-   ========================= */
-function funcCalcHTML(){ return `<input type="text" id="funcCalcInput" style="width:100%;font-size:24px;" placeholder="Math形式で入力"><br/>
-  <button class="btn" onclick="funcCalcEval()">計算</button>`;
-}
-function funcCalcEval(){
-  const inp=document.getElementById('funcCalcInput'); 
-  try{ inp.value=Function('"use strict";return ('+inp.value+')')(); } catch(e){ alert('式が不正です'); }
+// --- JSONエディタ ---
+function openJSONApp(){ createWindow('JSONエディタ','<textarea style="height:100%;"></textarea>',400,300);}
+
+// --- 時計 ---
+function openClock(){
+  const html='<div id="clockDisplay" style="font-size:24px;text-align:center;"></div>';
+  const win=createWindow('時計',html,200,100);
+  function updateClock(){ win.querySelector('#clockDisplay').textContent=new Date().toLocaleTimeString(); }
+  setInterval(updateClock,1000); updateClock();
 }
 
-/* =========================
-   APPMAKER仮ビルド（VAPP生成）
-   ========================= */
-function appMakerHTML(){ 
-  return `<textarea id="appMakerArea" style="width:100%;height:70%;" placeholder="ここにアプリ内容をJSON形式で記述"></textarea><br/>
-          <input type="text" id="appMakerName" placeholder="アプリ名"><br/>
-          <input type="text" id="appMakerIcon" placeholder="アイコンURL"><br/>
-          <button class="btn" onclick="buildVAPP()">VAPPダウンロード</button>`;
+// --- 電卓 ---
+function openCalculator(){
+  const html=`<input type="text" id="calcInput" readonly><br>
+  <button onclick="appendCalc('1')">1</button><button onclick="appendCalc('2')">2</button>
+  <button onclick="appendCalc('3')">3</button><button onclick="appendCalc('+')">+</button><br>
+  <button onclick="appendCalc('4')">4</button><button onclick="appendCalc('5')">5</button>
+  <button onclick="appendCalc('6')">6</button><button onclick="appendCalc('-')">-</button><br>
+  <button onclick="appendCalc('7')">7</button><button onclick="appendCalc('8')">8</button>
+  <button onclick="appendCalc('9')">9</button><button onclick="appendCalc('*')">*</button><br>
+  <button onclick="appendCalc('0')">0</button><button onclick="appendCalc('.')">.</button>
+  <button onclick="calculate()">=</button><button onclick="appendCalc('/')">/</button>
+  <button onclick="clearCalc()">C</button>`;
+  createWindow('電卓',html,300,300);
+}
+let calcValue='';
+function appendCalc(c){ calcValue+=c; document.getElementById('calcInput').value=calcValue; }
+function calculate(){ try{ calcValue=eval(calcValue).toString(); document.getElementById('calcInput').value=calcValue; }catch(e){ alert('エラー'); } }
+function clearCalc(){ calcValue=''; document.getElementById('calcInput').value=''; }
+
+// --- 関数電卓 ---
+function openFuncCalc(){
+  const html=`<input type="text" id="funcInput" readonly><br>
+  <button onclick="appendFunc('Math.sin(')">sin</button>
+  <button onclick="appendFunc('Math.cos(')">cos</button>
+  <button onclick="appendFunc('Math.tan(')">tan</button>
+  <button onclick="appendFunc('Math.log(')">log</button><br>
+  <button onclick="appendFunc('Math.PI')">π</button>
+  <button onclick="appendFunc('Math.E')">e</button>
+  <button onclick="funcCalculate()">=</button>
+  <button onclick="funcClear()">C</button>`;
+  createWindow('関数電卓',html,400,300);
+}
+let funcValue='';
+function appendFunc(c){ funcValue+=c; document.getElementById('funcInput').value=funcValue; }
+function funcCalculate(){ try{ funcValue=eval(funcValue).toString(); document.getElementById('funcInput').value=funcValue; }catch(e){ alert('エラー'); } }
+function funcClear(){ funcValue=''; document.getElementById('funcInput').value=''; }
+
+// --- カメラ ---
+function openCamera(){
+  const html=`<video id="video" autoplay playsinline muted style="width:100%;"></video><br>
+  <button onclick="capturePhoto()">📷 写真</button>
+  <canvas id="canvas" style="display:none;"></canvas>`;
+  const win=createWindow('カメラ',html,400,300);
+  const video=win.querySelector('video');
+  navigator.mediaDevices.getUserMedia({video:true}).then(stream=>video.srcObject=stream).catch(()=>alert('カメラ不可'));
+  window.capturePhoto=function(){
+    const canvas=win.querySelector('#canvas');
+    canvas.width=video.videoWidth;
+    canvas.height=video.videoHeight;
+    canvas.getContext('2d').drawImage(video,0,0);
+    const link=document.createElement('a');
+    link.href=canvas.toDataURL('image/png');
+    link.download='photo.png';
+    link.click();
+  };
+}
+
+// --- 拡張子変更 ---
+function openExtChanger(){
+  const html=`<input type="file" id="fileInput"><br>
+  新しい拡張子: <input type="text" id="newExt" value="txt"><br>
+  <button onclick="changeExt()">変更</button>`;
+  createWindow('拡張子変更',html,300,200);
+}
+function changeExt(){
+  const file=document.getElementById('fileInput').files[0];
+  if(!file)return alert('ファイル選択');
+  const newExt=document.getElementById('newExt').value;
+  const link=document.createElement('a');
+  link.href=URL.createObjectURL(file);
+  link.download=file.name.replace(/\.[^/.]+$/,'')+'.'+newExt;
+  link.click();
+}
+
+// --- APPMAKER ---
+function openAppMaker(){
+  const html=`<textarea id="appCode" style="height:100%;"></textarea>
+  <button onclick="buildVAPP()">VAPPダウンロード</button>`;
+  createWindow('APPMAKER',html,500,400);
 }
 function buildVAPP(){
-  const code=document.getElementById('appMakerArea').value;
-  const name=document.getElementById('appMakerName').value.trim()||'NewApp';
-  const icon=document.getElementById('appMakerIcon').value.trim()||'https://cdn-icons-png.flaticon.com/512/565/565547.png';
-  try{ JSON.parse(code); }catch(e){ return alert('不正なJSONです'); }
-  const blob=new Blob([JSON.stringify({name,icon,content:code})],{type:'application/json'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name+'.vapp'; a.click();
+  const code=document.getElementById('appCode').value;
+  const blob=new Blob([code],{type:'text/plain'});
+  const link=document.createElement('a');
+  link.href=URL.createObjectURL(blob);
+  link.download='app.vapp';
+  link.click();
 }
+
+// --- アプリストア ---
+function openAppStore(){
+  createWindow('アプリストア','<a href="https://github.com/kawahara462/APPS" target="_blank">公式サイトはこちら</a>',300,200);
+}
+
+// --- デスクトップアイコン ---
+createIcon('メモ帳',20,20,openNotepad,'https://cdn-icons-png.flaticon.com/48/136/136522.png');
+createIcon('PROGRAM',120,20,openProgram,'https://cdn-icons-png.flaticon.com/48/3097/3097357.png');
+createIcon('シート',220,20,initSheetApp,'https://cdn-icons-png.flaticon.com/48/196/196190.png');
+createIcon('JSONエディタ',320,20,openJSONApp,'https://cdn-icons-png.flaticon.com/48/136/136521.png');
+createIcon('時計',420,20,openClock,'https://cdn-icons-png.flaticon.com/48/61/61112.png');
+createIcon('電卓',520,20,openCalculator,'https://cdn-icons-png.flaticon.com/48/61/61456.png');
+createIcon('関数電卓',620,20,openFuncCalc,'https://cdn-icons-png.flaticon.com/48/61/61113.png');
+createIcon('カメラ',20,120,openCamera,'https://cdn-icons-png.flaticon.com/48/61/61440.png');
+createIcon('拡張子変更',120,120,openExtChanger,'https://cdn-icons-png.flaticon.com/48/61/61430.png');
+createIcon('APPMAKER',220,120,openAppMaker,'https://cdn-icons-png.flaticon.com/48/61/61431.png');
+createIcon('アプリストア',320,120,openAppStore,'https://cdn-icons-png.flaticon.com/48/61/61432.png');
+
 </script>
+</body>
+</html>
