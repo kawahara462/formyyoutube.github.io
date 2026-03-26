@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>テキスト正規化ツール</title>
+<style>
+body {
+  font-family: sans-serif;
+  padding: 20px;
+  background: #f5f5f5;
+}
+textarea {
+  width: 100%;
+  height: 150px;
+  margin-bottom: 10px;
+}
+.box {
+  background: white;
+  padding: 15px;
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+button {
+  padding: 10px 20px;
+  font-size: 16px;
+}
+label {
+  display: block;
+  margin: 5px 0;
+}
+</style>
+</head>
+<body>
+
+<h2>テキスト正規化ツール</h2>
+
+<div class="box">
+  <h3>入力</h3>
+  <textarea id="input"></textarea>
+</div>
+
+<div class="box">
+  <h3>機能選択</h3>
+
+  <label><input type="checkbox" id="removeNewline"> 改行削除</label>
+  <label><input type="checkbox" id="removeSpace"> 連続スペース削除</label>
+  <label><input type="checkbox" id="toHalf"> 全角 → 半角</label>
+  <label><input type="checkbox" id="toFull"> 半角 → 全角</label>
+  <label><input type="checkbox" id="lowercase"> 小文字化</label>
+  <label><input type="checkbox" id="uppercase"> 大文字化</label>
+  <label><input type="checkbox" id="trim"> 前後空白削除</label>
+  <label><input type="checkbox" id="removeSymbol"> 記号削除</label>
+  <label><input type="checkbox" id="onlyNumber"> 数字のみ抽出</label>
+
+</div>
+
+<button onclick="normalizeText()">実行</button>
+
+<div class="box">
+  <h3>結果</h3>
+  <textarea id="output" readonly></textarea>
+</div>
+
+<script>
+function normalizeText() {
+  let text = document.getElementById("input").value;
+
+  // 改行削除
+  if (document.getElementById("removeNewline").checked) {
+    text = text.replace(/\n/g, "");
+  }
+
+  // 連続スペース削除
+  if (document.getElementById("removeSpace").checked) {
+    text = text.replace(/\s+/g, " ");
+  }
+
+  // 全角→半角
+  if (document.getElementById("toHalf").checked) {
+    text = text.replace(/[！-～]/g, function(s) {
+      return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
+    }).replace(/　/g, " ");
+  }
+
+  // 半角→全角
+  if (document.getElementById("toFull").checked) {
+    text = text.replace(/[!-~]/g, function(s) {
+      return String.fromCharCode(s.charCodeAt(0) + 0xFEE0);
+    }).replace(/ /g, "　");
+  }
+
+  // 小文字化
+  if (document.getElementById("lowercase").checked) {
+    text = text.toLowerCase();
+  }
+
+  // 大文字化
+  if (document.getElementById("uppercase").checked) {
+    text = text.toUpperCase();
+  }
+
+  // trim
+  if (document.getElementById("trim").checked) {
+    text = text.trim();
+  }
+
+  // 記号削除
+  if (document.getElementById("removeSymbol").checked) {
+    text = text.replace(/[^\w\s]/g, "");
+  }
+
+  // 数字のみ
+  if (document.getElementById("onlyNumber").checked) {
+    text = text.replace(/\D/g, "");
+  }
+
+  document.getElementById("output").value = text;
+}
+</script>
+
+</body>
+</html>
