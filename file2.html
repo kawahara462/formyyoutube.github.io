@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>独自形式デコーダ</title>
+</head>
+<body>
+
+<h2>ファイル読み込み</h2>
+<input type="file" id="fileInput">
+<pre id="output"></pre>
+
+<script>
+document.getElementById("fileInput").addEventListener("change", function(e) {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+
+    reader.onload = function() {
+        const buffer = reader.result;
+        const view = new DataView(buffer);
+
+        let result = "";
+
+        // シグネチャ（最初の4バイト）
+        let signature = "";
+        for (let i = 0; i < 4; i++) {
+            signature += String.fromCharCode(view.getUint8(i));
+        }
+
+        result += "シグネチャ: " + signature + "\n";
+
+        // バージョン
+        const version = view.getUint8(4);
+        result += "バージョン: " + version + "\n";
+
+        // データ長（2バイト）
+        const length = view.getUint16(5, true);
+        result += "データ長: " + length + "\n";
+
+        // データ本体
+        let data = "";
+        for (let i = 0; i < length; i++) {
+            data += String.fromCharCode(view.getUint8(7 + i));
+        }
+
+        result += "データ: " + data + "\n";
+
+        document.getElementById("output").textContent = result;
+    };
+
+    reader.readAsArrayBuffer(file);
+});
+</script>
+
+</body>
+</html>
