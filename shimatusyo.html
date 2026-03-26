@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>手書き原稿用紙ツール 完全版</title>
+
+<h1>200文字までしか出力出来ません。</h1>
+
+<style>
+body { font-family: sans-serif; display:flex; flex-direction:column; align-items:center; margin:20px;}
+#controls { margin-bottom:10px;}
+#handCanvas { border:1px solid #aaa; touch-action: none; margin-bottom:10px;}
+#genkouCanvas { border:1px solid #000; }
+button { margin-right:5px; margin-top:5px; }
+</style>
+</head>
+<body>
+
+<div id="controls">
+<textarea id="inputText" rows="3" cols="40" placeholder="文章を入力"></textarea>
+<button id="generateBtn">使用文字を抽出</button>
+<div id="currentChar"></div>
+<button id="nextCharBtn">次の文字へ</button>
+<button id="clearBtn">消す</button>
+<button id="drawGenkouBtn">原稿用紙に反映</button>
+</div>
+
+<canvas id="handCanvas" width="400" height="400"></canvas>
+<canvas id="genkouCanvas" width="600" height="800"></canvas>
+
+<script>
+const lineSpacing = 1.438;
+
+const inputText = document.getElementById('inputText');
+const generateBtn = document.getElementById('generateBtn');
+const currentCharDiv = document.getElementById('currentChar');
+const nextCharBtn = document.getElementById('nextCharBtn');
+const clearBtn = document.getElementById('clearBtn');
+const drawGenkouBtn = document.getElementById('drawGenkouBtn');
+
+const handCanvas = document.getElementById('handCanvas');
+const hCtx = handCanvas.getContext('2d');
+
+const genkouCanvas = document.getElementById('genkouCanvas');
+const gCtx = genkouCanvas.getContext('2d');
+
+const cellSize = 16.8;
+const charsPerCol = 20;
+let startX = 527;
+let startY = 44;
+
+// ★ 追加：後半開始位置（ここを調整）
+let startX_after200 = 509; // ← 好きな値に調整（-20くらいが目安）
+
+const genkouImage = new Image();
+genkouImage.src = 'https://exia.co.jp/bizroute/wp-content/uploads/genkouA4sn.png';
+
+let genkouOffsetX = 0;
+let genkouOffsetY = 0;
+let genkouScale = 1;
+
+let charList = [];
+let charIndex = 0;
+
+let drawing = false;
+let currentStroke = [];
+let charStrokes = {};
+
+function getCanvasPos(e, canvas){
+const rect = canvas.getBoundingClientRect();
+if(e.touches){
+return {x:e.touches[0].clientX - rect.left, y:e.touches[0].clientY - rect.top};
+} else {
+return {x:e.clientX - rect.left, y:e.clientY - rect.top};
+}
+}
+
+function startDrawing(e){ e.preventDefault(); drawing=true; currentStroke=[]; }
+function moveDrawing(e){
+if(!drawing) return;
+const pos = getCanvasPos(e, handCanvas);
+currentStroke.push({x:pos.x, y:pos.y});
+redrawHand();
+}
+function endDrawing(){
+if(!drawing) return;
+drawing=false;
+const c = charList[charIndex];
+if(!charStrokes[c]) charStrokes[c]=[];
+charStrokes[c].push(currentStroke);
+currentStroke=[];
+redrawHand();
+}
+
+handCanvas.addEventListener('mousedown', startDrawing);
+handCanvas.addEventListener('mousemove', moveDrawing);
+handCanvas.addEventListener('mouseup', endDrawing);
+handCanvas.addEventListener('mouseout', endDrawing);
+handCanvas.addEventListener('touchstart', startDrawing);
+handCanvas.addEventListener('touchmove', moveDrawing);
+handCanvas.addEventListener('touchend', endDrawing);
+
+function redrawHand(){
+hCtx.clearRect(0,0,handCanvas.width,handCanvas.height);
+hCtx.strokeStyle='#000';
+hCtx.lineWidth=8;
+hCtx.lineJoin='round';
+hCtx.lineCap='round';
+
+const c = charList[charIndex];
+
+if(charStrokes[c]){
+for(let s of charStrokes[c]){
+hCtx.beginPath();
+hCtx.moveTo(s[0].x,s[0].y);
+for(let i=1;i<s.length;i++) hCtx.lineTo(s[i].x,s[i].y);
+hCtx.stroke();
+}
+}
+
+if(currentStroke.length>0){
+hCtx.beginPath();
+hCtx.moveTo(currentStroke[0].x,currentStroke[0].y);
+for(let i=1;i<currentStroke.length;i++) hCtx.lineTo(currentStroke[i].x,currentStroke[i].y);
+hCtx.stroke();
+}
+}
+
+generateBtn.addEventListener('click',()=>{
+const text = inputText.value;
+const set = new Set();
+for(let c of text){ if(c.trim()!=='') set.add(c);}
+charList = Array.from(set);
+charIndex=0;
+
+if(charList.length>0){
+currentCharDiv.textContent = "手書きしてください: " + charList[charIndex];
+hCtx.clearRect(0,0,handCanvas.width,handCanvas.height);
+}
+});
+
+nextCharBtn.addEventListener('click',()=>{
+charIndex++;
+currentStroke=[];
+
+if(charIndex>=charList.length){
+currentCharDiv.textContent="全ての文字を手書きしました";
+hCtx.clearRect(0,0,handCanvas.width,handCanvas.height);
+} else {
+currentCharDiv.textContent = "手書きしてください: " + charList[charIndex];
+hCtx.clearRect(0,0,handCanvas.width,handCanvas.height);
+redrawHand();
+}
+});
+
+function drawTextOnGenkou(){
+gCtx.clearRect(0,0,genkouCanvas.width,genkouCanvas.height);
+
+if(!genkouImage.complete){
+genkouImage.onload = drawTextOnGenkou;
+return;
+}
+
+genkouScale = Math.min(genkouCanvas.width / genkouImage.width, genkouCanvas.height / genkouImage.height);
+const w = genkouImage.width * genkouScale;
+const h = genkouImage.height * genkouScale;
+genkouOffsetX = (genkouCanvas.width - w)/2;
+genkouOffsetY = (genkouCanvas.height - h)/2;
+gCtx.drawImage(genkouImage, genkouOffsetX, genkouOffsetY, w, h);
+
+const text = inputText.value;
+let col = 0;
+let row = 0;
+
+for(let i=0;i<text.length;i++){
+const c = text[i];
+if(c.trim()==='') continue;
+
+const strokesArr = charStrokes[c];
+if(!strokesArr) continue;
+
+gCtx.save();
+
+// ★ ここがコア：201文字目以降で開始位置変更
+let currentStartX = (i >= 200) ? startX_after200 : startX;
+
+const scaleChar = cellSize / handCanvas.width;
+
+gCtx.translate(
+currentStartX + genkouOffsetX + col*cellSize*lineSpacing + cellSize/2,
+startY + genkouOffsetY + row*cellSize + cellSize/2
+);
+
+gCtx.scale(scaleChar, scaleChar);
+gCtx.translate(-handCanvas.width/2, -handCanvas.height/2);
+
+gCtx.strokeStyle='#000';
+gCtx.lineWidth=6;
+gCtx.lineJoin='round';
+gCtx.lineCap='round';
+
+for(let s of strokesArr){
+gCtx.beginPath();
+gCtx.moveTo(s[0].x, s[0].y);
+for(let j=1;j<s.length;j++) gCtx.lineTo(s[j].x, s[j].y);
+gCtx.stroke();
+}
+
+gCtx.restore();
+
+row++;
+if(row >= charsPerCol){
+row = 0;
+col--;
+}
+}
+}
+
+clearBtn.addEventListener('click',()=>{
+gCtx.clearRect(0,0,genkouCanvas.width,genkouCanvas.height);
+charStrokes={};
+currentStroke=[];
+hCtx.clearRect(0,0,handCanvas.width,handCanvas.height);
+});
+
+drawGenkouBtn.addEventListener('click', drawTextOnGenkou);
+</script>
+</body>
+</html>
