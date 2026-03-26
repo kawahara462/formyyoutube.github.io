@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>URLデコーダ</title>
+<style>
+body {
+font-family: sans-serif;
+background: #111;
+color: #fff;
+text-align: center;
+padding: 20px;
+}
+textarea {
+width: 90%;
+height: 120px;
+margin: 10px;
+padding: 10px;
+font-size: 16px;
+border-radius: 8px;
+border: none;
+}
+button {
+padding: 10px 20px;
+font-size: 16px;
+border: none;
+border-radius: 8px;
+background: #00c3ff;
+color: #000;
+cursor: pointer;
+}
+button:hover {
+background: #0099cc;
+}
+</style>
+</head>
+<body>
+
+<h2>URL＝のところにアクセスしてね☆</h2>
+
+<textarea id="input" placeholder="ここに % が入ったURLを貼る"></textarea><br>
+
+<button onclick="decode()">デコード</button>
+<button onclick="decodeTwice()">2回デコード</button>
+
+<textarea id="output" placeholder="結果がここに出る"></textarea>
+
+<script>
+function decode() {
+const input = document.getElementById("input").value;
+try {
+document.getElementById("output").value = decodeURIComponent(input);
+} catch (e) {
+document.getElementById("output").value = "エラー: デコードできません";
+}
+}
+
+function decodeTwice() {
+const input = document.getElementById("input").value;
+try {
+let once = decodeURIComponent(input);
+let twice = decodeURIComponent(once);
+document.getElementById("output").value = twice;
+} catch (e) {
+document.getElementById("output").value = "エラー: 2回デコードできません";
+}
+}
+</script>
+
+</body>
+</html>
