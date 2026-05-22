@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>点数計算（完全版＋基準表示）</title>
+<style>
+body { font-family: sans-serif; padding:20px; }
+h2 { margin-top:30px; border-bottom:1px solid #ccc; padding-bottom:5px;}
+small { color:#555; margin-left:10px; }
+label { display:block; margin:5px 0; }
+input, select { margin-left:10px; }
+button { margin-top:20px; padding:10px; }
+#result { font-size:24px; margin-top:20px; font-weight:bold; }
+</style>
+</head>
+<body>
+
+<h1>点数計算（完全再現＋基準表示）</h1>
+
+<h2>参加 <small>個人=500 / 少人数=100×人数 / 団体=10×人数</small></h2>
+<label>人数 <input type="number" id="people" value="1"></label>
+<label>
+形式
+<select id="type">
+<option value="solo">個人</option>
+<option value="small">4人以下</option>
+<option value="group">団体</option>
+</select>
+</label>
+
+<h2>場所 <small>駅:50〜500 / 人通り:10〜100 / 有料:1000円ごとに+10</small></h2>
+<label>駅加点 <input type="number" id="station" value="0"></label>
+<label>人通り加点 <input type="number" id="traffic" value="0"></label>
+<label>特定施設加点（学校・警察など） <input type="number" id="facility" value="0"></label>
+<label>有料撮影会超過額（円） <input type="number" id="paid" value="0"></label>
+
+<h2>時間 <small>平日+50 / ラッシュ+50 / 深夜+100</small></h2>
+<label><input type="checkbox" id="weekday">平日</label>
+<label><input type="checkbox" id="rush">ラッシュ</label>
+<label><input type="checkbox" id="night">深夜</label>
+
+<h2>撮影対象 <small>10〜100 / レア50〜150 / 非公開100〜300 / 秘匿500</small></h2>
+<label>基本点 <input type="number" id="target" value="0"></label>
+<label><input type="checkbox" id="slPenalty">定期SL（20点に固定）</label>
+<label><input type="checkbox" id="doctorPenalty">ドクターイエロー（50点に固定）</label>
+
+<h2>芸術点 <small>曇り50 / 被り50〜100 / 写り込み100〜300 など</small></h2>
+<label>曇り・マンダーラ <input type="number" id="cloud" value="0"></label>
+<label>被り <input type="number" id="cover" value="0"></label>
+<label>裏被り <input type="number" id="backCover" value="0"></label>
+<label>一般人写り込み <input type="number" id="citizen" value="0"></label>
+<label>撮り鉄写り込み <input type="number" id="otaku" value="0"></label>
+<label>動物写り込み <input type="number" id="animal" value="0"></label>
+
+<h2>イベント <small>注意+10 / キレ+50 / パトカー+80 / 職質+100 など</small></h2>
+<label>注意回数 <input type="number" id="warn" value="0"></label>
+<label>住民キレ回数 <input type="number" id="rage" value="0"></label>
+<label>パトカー台数 <input type="number" id="police" value="0"></label>
+<label>喧嘩回数 <input type="number" id="fight" value="0"></label>
+<label>職質人数 <input type="number" id="question" value="0"></label>
+<label>逆ギレ人数 <input type="number" id="counter" value="0"></label>
+
+<h2>事後 <small>RP×10 / 再生×10 / ランキング+500 / メディア100〜1000</small></h2>
+<label>リポスト数 <input type="number" id="rp" value="0"></label>
+<label>動画再生数 <input type="number" id="views" value="0"></label>
+<label><input type="checkbox" id="ranking">検索ランキング入り（+500）</label>
+<label>
+メディア
+<select id="media">
+<option value="0">なし</option>
+<option value="100">新聞</option>
+<option value="200">Yahoo</option>
+<option value="500">全国放送</option>
+<option value="1000">ワイドショー</option>
+</select>
+</label>
+
+<button onclick="calc()">計算</button>
+
+<div id="result">合計: 0 点</div>
+
+<script>
+function calc(){
+let score = 0;
+
+let p = Number(people.value);
+let type = document.getElementById("type").value;
+
+if(type==="solo") score += 500;
+else if(type==="small") score += p*100;
+else score += p*10;
+
+score += Number(station.value);
+score += Number(traffic.value);
+score += Number(facility.value);
+score += Math.floor(Number(paid.value)/1000)*10;
+
+if(weekday.checked) score+=50;
+if(rush.checked) score+=50;
+if(night.checked) score+=100;
+
+let t = Number(target.value);
+if(slPenalty.checked) t = 20;
+if(doctorPenalty.checked) t = 50;
+score += t;
+
+score += Number(cloud.value);
+score += Number(cover.value);
+score += Number(backCover.value);
+score += Number(citizen.value);
+score += Number(otaku.value);
+score += Number(animal.value);
+
+score += warn.value*10;
+score += rage.value*50;
+score += police.value*80;
+score += fight.value*100;
+score += question.value*100;
+score += counter.value*100;
+
+score += rp.value*10;
+score += views.value*10;
+if(ranking.checked) score += 500;
+score += Number(media.value);
+
+document.getElementById("result").innerText = "合計: " + score + " 点";
+}
+</script>
+
+</body>
+</html>
