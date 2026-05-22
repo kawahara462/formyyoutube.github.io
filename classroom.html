@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>IFRAME Test</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    iframe {
+      width: 100%;
+      height: 100vh;
+      border: none;
+    }
+  </style>
+<script>
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    location.href = "https://classroom.google.com/h";
+  }
+});
+</script>
+</head>
+<body>
+
+<iframe
+  src="https://unblocked-sites-uaex.onrender.com/"
+  allowfullscreen>
+</iframe>
+
+</body>
+</html>
