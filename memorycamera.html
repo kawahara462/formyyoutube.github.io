@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>HTML Camera</title>
+
+  <style>
+    body{
+      margin:0;
+      background:#111;
+      color:white;
+      font-family:sans-serif;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      height:100vh;
+      gap:16px;
+    }
+
+    video{
+      width:90vw;
+      max-width:900px;
+      border-radius:16px;
+      background:black;
+    }
+
+    button{
+      padding:12px 20px;
+      font-size:16px;
+      border:none;
+      border-radius:10px;
+      cursor:pointer;
+    }
+
+    canvas{
+      display:none;
+    }
+
+    img{
+      max-width:90vw;
+      border-radius:16px;
+    }
+  </style>
+</head>
+<body>
+
+  <video id="video" autoplay playsinline muted></video>
+  <!-- muted が重要。これがないと環境によっては音を拾ってそのまま再生される -->
+
+  <div>
+    <button id="startBtn">カメラ開始</button>
+    <button id="captureBtn">撮影</button>
+  </div>
+
+  <canvas id="canvas"></canvas>
+  <img id="photo" alt="撮影画像">
+
+  <script>
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const photo = document.getElementById("photo");
+
+    let stream = null;
+
+    document.getElementById("startBtn").addEventListener("click", async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false // マイクを無効化
+        });
+
+        video.srcObject = stream;
+
+      } catch (err) {
+        alert("カメラを使用できません: " + err.message);
+      }
+    });
+
+    document.getElementById("captureBtn").addEventListener("click", () => {
+      if (!stream) {
+        alert("先にカメラを開始してください");
+        return;
+      }
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0);
+
+      photo.src = canvas.toDataURL("image/png");
+    });
+  </script>
+
+</body>
+</html>
