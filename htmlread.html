@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>HTML Obfuscator</title>
+<style>
+body{
+    font-family:sans-serif;
+    margin:20px;
+}
+textarea{
+    width:100%;
+    height:250px;
+    margin-top:10px;
+}
+button{
+    padding:10px 20px;
+    margin:10px 0;
+}
+</style>
+</head>
+<body>
+
+<h2>HTML難読化ツール</h2>
+
+<textarea id="input" placeholder="HTMLを貼り付け"></textarea>
+
+<br>
+
+<button onclick="obfuscate()">難読化</button>
+
+<br>
+
+<textarea id="output" placeholder="結果"></textarea>
+
+<script>
+
+function rand(len=8){
+    const c="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let s="";
+    for(let i=0;i<len;i++){
+        s+=c[Math.floor(Math.random()*c.length)];
+    }
+    return s;
+}
+
+function obfuscate(){
+
+    let html=document.getElementById("input").value;
+
+    const names={
+        a:rand(),
+        b:rand(),
+        c:rand(),
+        d:rand(),
+        e:rand(),
+        f:rand()
+    };
+
+    let chars=[];
+
+    for(let i=0;i<html.length;i++){
+        chars.push(html.charCodeAt(i));
+    }
+
+    const code=`
+
+(function(){
+
+var ${names.a}=[${chars.join(",")}];
+
+function ${names.b}(){
+
+    var x="";
+
+    for(var i=0;i<${names.a}.length;i++){
+
+        x+=String.fromCharCode(${names.a}[i]);
+
+    }
+
+    ${names.b}=function(){
+        return x;
+    };
+
+    return ${names.b}();
+
+}
+
+(function(){
+
+    var dummy=0;
+
+    for(var i=0;i<500;i++){
+
+        dummy+=Math.random();
+
+    }
+
+})();
+
+var ${names.c}=btoa(
+    unescape(
+        encodeURIComponent(
+            ${names.b}()
+        )
+    )
+);
+
+var ${names.d}=btoa(${names.c});
+
+var ${names.e}=function(){
+
+    return decodeURIComponent(
+        escape(
+            atob(
+                atob(
+                    ${names.d}
+                )
+            )
+        )
+    );
+
+};
+
+(new Function(
+    "document.open();document.write(arguments[0]);document.close();"
+))(
+    ${names.e}()
+);
+
+})();
+`;
+
+    const finalHtml=`<!DOCTYPE html>
+<html>
+<body>
+<script>
+${code.replace(/<\/script>/gi,"<\\\\/script>")}
+<\/script>
+</body>
+</html>`;
+
+    document.getElementById("output").value=finalHtml;
+
+}
+
+</script>
+
+</body>
+</html>
