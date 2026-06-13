@@ -2,128 +2,247 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Python Runner (PyScript)</title>
+<title>Python Runner (Pyodide)</title>
+
 <style>
 html,body{
     margin:0;
     width:100%;
     height:100%;
-    font-family: sans-serif;
+    font-family:sans-serif;
 }
+
 #editor{
     width:100%;
-    height:calc(100% - 150px); /* 出力エリアの分、少しエディタを狭めています */
+    height:calc(100% - 150px);
     box-sizing:border-box;
     font-family:monospace;
-    font-size: 16px;
-    padding: 10px;
+    font-size:16px;
+    padding:10px;
 }
+
 #go{
     width:100%;
     height:50px;
     font-size:20px;
-    cursor: pointer;
+    cursor:pointer;
 }
-#output-container {
-    width: 100%;
-    height: 100px;
-    background: #f8f9fa;
-    border-top: 2px solid #ccc;
-    padding: 10px;
-    box-sizing: border-box;
-    overflow-y: auto;
+
+#output-container{
+    width:100%;
+    height:100px;
+    background:#f8f9fa;
+    border-top:2px solid #ccc;
+    padding:10px;
+    box-sizing:border-box;
+    overflow-y:auto;
 }
-#output-title {
-    font-size: 12px;
-    color: #666;
-    margin: 0 0 5px 0;
+
+#output-title{
+    font-size:12px;
+    color:#666;
+    margin:0 0 5px 0;
 }
-/* 同意画面用のスタイル */
-#disclaimer-container {
-    padding: 20px;
-    line-height: 1.6;
-    max-width: 600px;
-    margin: 50px auto;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+
+#disclaimer-container{
+    padding:20px;
+    line-height:1.6;
+    max-width:600px;
+    margin:50px auto;
+    border:1px solid #ccc;
+    border-radius:8px;
+    box-shadow:0 2px 10px rgba(0,0,0,.1);
 }
-#agree-btn {
-    display: block;
-    width: 100%;
-    padding: 12px;
-    background-color: #28a745; /* Pythonらしく緑系 */
-    color: white;
-    border: none;
-    border-radius: 4px;
-    font-size: 16px;
-    cursor: pointer;
-    margin-top: 20px;
+
+#agree-btn{
+    display:block;
+    width:100%;
+    padding:12px;
+    background:#28a745;
+    color:white;
+    border:none;
+    border-radius:4px;
+    font-size:16px;
+    cursor:pointer;
+    margin-top:20px;
 }
-#agree-btn:hover {
-    background-color: #218838;
+
+#agree-btn:hover{
+    background:#218838;
+}
+
+#py-output{
+    padding:20px;
+    font-family:monospace;
+    white-space:pre-wrap;
 }
 </style>
+
 <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
-<link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css" />
-<script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+<script src="https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js"></script>
+
 </head>
 <body>
 
 <script>
-const p = new URLSearchParams(location.search).get("p");
 
-if (p) {
-    // 共有リンクからアクセスされた場合：免責事項を表示
+let pyodide = null;
+
+async function runPython(code){
+
+    const output = document.getElementById("py-output");
+
+    try{
+
+        output.textContent =
+            "⏳ Python環境を起動中...\n初回は数十秒かかる場合があります";
+
+        if(!pyodide){
+            pyodide = await loadPyodide();
+        }
+
+        let capturedOutput = "";
+
+        pyodide.setStdout({
+            batched:(text)=>{
+                capturedOutput += text + "\n";
+            }
+        });
+
+        pyodide.setStderr({
+            batched:(text)=>{
+                capturedOutput += text + "\n";
+            }
+        });
+
+        output.textContent = "▶ 実行中...";
+
+        await pyodide.runPythonAsync(code);
+
+        output.textContent =
+            capturedOutput || "✔ 実行完了";
+
+    }
+    catch(err){
+
+        output.textContent =
+            "❌ エラー\n\n" + err;
+
+        console.error(err);
+
+    }
+
+}
+
+const p =
+    new URLSearchParams(location.search).get("p");
+
+if(p){
+
     document.body.innerHTML = `
         <div id="disclaimer-container">
             <h2>⚠️ 免責事項および注意事項 (Python)</h2>
-            <p>このリンクは第三者によって作成されたPythonコードを含んでいます。実行するとブラウザ上でPythonスクリプトが動作します。</p>
-            <p><strong>当サイトは、このリンク先の内容および実行によって生じた、いかなる損害・不利益についても一切の責任を负いません。</strong> 信頼できる送信元からのリンクである場合のみ、自己責任で実行してください。</p>
-            <button id="agree-btn">同意してPythonを実行する</button>
+
+            <p>
+            このリンクは第三者によって作成された
+            Pythonコードを含んでいます。
+            </p>
+
+            <p>
+            実行するとブラウザ上でPythonが動作します。
+            </p>
+
+            <p>
+            <strong>
+            当サイトは実行によって発生した
+            いかなる損害についても責任を負いません。
+            </strong>
+            </p>
+
+            <button id="agree-btn">
+                同意してPythonを実行する
+            </button>
         </div>
-        <div id="py-output" style="padding: 20px; font-family: monospace; white-space: pre-wrap;"></div>
+
+        <div id="py-output"></div>
     `;
 
-    document.getElementById("agree-btn").onclick = () => {
-        const decodedCode = LZString.decompressFromEncodedURIComponent(p);
-       
-        // 同意画面を消して、実行中メッセージを表示
-        const container = document.getElementById("disclaimer-container");
-        container.innerHTML = `<p>⏳ Python環境（Pyodide）を起動中... 初回は数十秒かかる場合があります。</p>`;
-       
-        // 動的にスクリプトタグを生成してPyScriptを実行
-        // 実行結果のprint()などは target で指定した要素に出力されます
-        const pyScriptTag = document.createElement("script");
-        pyScriptTag.type = "py";
-        pyScriptTag.setAttribute("target", "py-output");
-        pyScriptTag.textContent = decodedCode;
-       
-        document.body.appendChild(pyScriptTag);
+    document.getElementById("agree-btn").onclick =
+    async ()=>{
+
+        const decodedCode =
+            LZString.decompressFromEncodedURIComponent(p);
+
+        document.getElementById(
+            "disclaimer-container"
+        ).innerHTML =
+        "<p>⏳ 実行準備中...</p>";
+
+        await runPython(decodedCode);
+
     };
 
-} else {
-    // 通常の作成画面
+}else{
+
     document.body.innerHTML = `
-        <textarea id="editor" placeholder="# ここにPythonコードを入力&#10;print('Hello, PyScript!')"></textarea>
-        <button id="go">Pythonコードの共有リンクを生成</button>
+        <textarea id="editor"
+placeholder="# ここにPythonコードを入力
+
+print('Hello World')
+"></textarea>
+
+        <button id="go">
+            Pythonコードの共有リンクを生成
+        </button>
+
         <div id="output-container">
-            <p id="output-title">【プレビュー出力エリア】</p>
-            <div id="local-output" style="font-family: monospace; white-space: pre-wrap;"></div>
+            <p id="output-title">
+                【共有URL】
+            </p>
+            <div id="local-output"></div>
         </div>
     `;
 
-    // プレビュー用にその場でも実行できるようにしたい場合は、ここにボタンを分けるロジックを追加できますが、
-    // 今回はシンプルに「GO」を押したらURLを切り替えて（結果的に同意画面経由で）実行する形にしています。
-    go.onclick = () => {
-        if (!editor.value.trim()) {
+    document.getElementById("go").onclick = ()=>{
+
+        const editor =
+            document.getElementById("editor");
+
+        const localOutput =
+            document.getElementById("local-output");
+
+        if(!editor.value.trim()){
+
             alert("コードを入力してください");
             return;
+
         }
-        const code = LZString.compressToEncodedURIComponent(editor.value);
-        location.search = "?p=" + code;
+
+        const compressed =
+            LZString.compressToEncodedURIComponent(
+                editor.value
+            );
+
+        const shareUrl =
+            location.origin +
+            location.pathname +
+            "?p=" +
+            compressed;
+
+        localOutput.innerHTML = `
+            <a href="${shareUrl}">
+                ${shareUrl}
+            </a>
+        `;
+
+        navigator.clipboard.writeText(
+            shareUrl
+        ).catch(()=>{});
+
     };
+
 }
+
 </script>
 
 </body>
