@@ -366,7 +366,7 @@ async function callPython(){
         alert("pyCall がまだ定義されていません。この画面はエディタ用です。共有リンクから実行してください。");
         return;
       }
-      const res = await window.pyCall("greet", { name: "有惺" });
+      const res = await window.pyCall("greet", { name: "名前" });
       document.getElementById('output').innerText = res.message || JSON.stringify(res);
     }
   <\/script>
