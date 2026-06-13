@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>PyHTML Fullstack Runner (HTML & Python)</title>
+<style>
+html,body{
+    margin:0;
+    width:100%;
+    height:100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background:#1e1e1e;
+    color:#ddd;
+}
+
+/* 共通 */
+button{
+    cursor:pointer;
+}
+
+/* 2画面エディタのレイアウト */
+#editor-container {
+    display: flex;
+    width: 100%;
+    height: calc(100% - 60px);
+    background:#1e1e1e;
+}
+.editor-box {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #333;
+}
+.editor-box:last-child{
+    border-right:none;
+}
+.editor-title {
+    background: #252526;
+    color: #fff;
+    padding: 6px 10px;
+    font-size: 13px;
+    font-weight: bold;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+}
+.editor-title span.sub{
+    font-size:11px;
+    color:#aaa;
+}
+textarea {
+    flex: 1;
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 13px;
+    padding: 10px;
+    resize: none;
+    border: none;
+    outline:none;
+    background:#1e1e1e;
+    color:#ddd;
+}
+#go {
+    width: 100%;
+    height: 60px;
+    font-size: 16px;
+    background:#0e639c;
+    color:white;
+    border:none;
+}
+#go:hover{
+    background:#1177bb;
+}
+
+/* トップページヘッダ */
+#top-header{
+    height:40px;
+    background:#333;
+    color:#ccc;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 12px;
+    font-size:13px;
+    border-bottom:1px solid #444;
+}
+#top-header .title{
+    font-weight:bold;
+    color:#fff;
+}
+#top-header a{
+    color:#4fc1ff;
+    text-decoration:none;
+    font-size:12px;
+}
+#top-header a:hover{
+    text-decoration:underline;
+}
+
+/* 同意画面・ログエリア */
+#disclaimer-container {
+    padding: 20px;
+    line-height: 1.6;
+    max-width: 720px;
+    margin: 40px auto;
+    border: 1px solid #444;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.6);
+    background:#1e1e1e;
+}
+#disclaimer-container h2{
+    margin-top:0;
+}
+#agree-btn {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    background-color: #0e639c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 15px;
+    cursor: pointer;
+    margin-top: 20px;
+}
+#agree-btn:hover {
+    background-color: #1177bb;
+}
+#status-log {
+    background: #1e1e1e;
+    color: #00ff00;
+    font-family: "Cascadia Code", Consolas, monospace;
+    padding: 10px;
+    font-size: 12px;
+    white-space: pre-wrap;
+    height: 120px;
+    overflow-y: auto;
+    border-bottom:1px solid #333;
+}
+#app-container {
+    width: 100%;
+    height: calc(100% - 120px);
+    border: none;
+    background: white;
+}
+
+/* 使い方パネル */
+#help-panel{
+    position:absolute;
+    right:10px;
+    top:46px;
+    width:280px;
+    background:#252526;
+    border:1px solid #333;
+    border-radius:4px;
+    padding:8px 10px;
+    font-size:11px;
+    color:#ccc;
+}
+#help-panel h3{
+    margin:4px 0 6px;
+    font-size:12px;
+    color:#fff;
+}
+#help-panel code{
+    background:#1e1e1e;
+    padding:1px 3px;
+    border-radius:3px;
+}
+
+/* 利用規約リンク */
+#tos-link{
+    margin-left:12px;
+}
+
+/* 利用規約ページ（トップ用） */
+#tos-page{
+    padding:20px;
+    max-width:800px;
+    margin:40px auto;
+    line-height:1.7;
+}
+#tos-page h1{
+    margin-top:0;
+}
+#tos-back-btn{
+    margin-top:20px;
+    padding:8px 16px;
+    background:#0e639c;
+    color:#fff;
+    border:none;
+    border-radius:4px;
+}
+
+/* スクロール調整 */
+body.tos-mode{
+    background:#111;
+}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
+<script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
+</head>
+<body>
+
+<script type="module">
+const urlParams = new URLSearchParams(location.search);
+const p = urlParams.get("p");
+const mode = urlParams.get("mode"); // tos など
+
+// -----------------------------
+// 利用規約ページ（トップ用）
+// -----------------------------
+function renderTosStandalone(){
+    document.body.classList.add("tos-mode");
+    document.body.innerHTML = `
+        <div id="tos-page">
+            <h1>利用規約 / 免責事項</h1>
+            <p>このページは、ブラウザ上で HTML と Python (Pyodide) を実行し、そのコードセットを URL に埋め込んで共有できる実験的ツールです。</p>
+            <p><strong>本ツールで作成・共有・実行されるコードの内容および結果について、提供者は一切の責任を負いません。</strong></p>
+            <ul>
+                <li>第三者が作成したコードを実行する場合は、内容をよく確認し、自己責任で実行してください。</li>
+                <li>悪意のあるコード、法令や公序良俗に反するコードの作成・共有は禁止します。</li>
+                <li>本ツールの利用により生じたいかなる損害・不利益についても、提供者は責任を負いません。</li>
+            </ul>
+            <p>これらに同意できない場合は、本ツールの利用および共有リンクの実行を中止してください。</p>
+            <button id="tos-back-btn">エディタ画面に戻る</button>
+        </div>
+    `;
+    document.getElementById("tos-back-btn").onclick = () => {
+        location.href = location.pathname;
+    };
+}
+
+// -----------------------------
+// 共有リンクアクセス時：同意画面 → 実行
+// -----------------------------
+async function renderRunnerWithDisclaimer(p){
+    document.body.innerHTML = `
+        <div id="disclaimer-container">
+            <h2>⚠️ 免責事項および注意事項 (HTML & Python)</h2>
+            <p>このリンクは第三者によって作成された HTML および Python のコードセットを含んでいます。実行するとブラウザ上で Python (Pyodide) が動作し、HTML から Python 関数を呼び出せる状態になります。</p>
+            <p><strong>本ツールの提供者は、このリンク先の内容および実行によって生じた、いかなる損害・不利益についても一切の責任を負いません。</strong> コード内容をよく確認のうえ、自己責任で実行してください。</p>
+            <button id="agree-btn">同意してコードを実行する</button>
+        </div>
+    `;
+
+    document.getElementById("agree-btn").onclick = async () => {
+        document.body.innerHTML = `
+            <div id="status-log">⏳ Python環境（Pyodide）を初期化中...</div>
+            <div id="app-container"></div>
+        `;
+        const logEl = document.getElementById('status-log');
+        const log = (msg) => { logEl.textContent += '\\n' + msg; logEl.scrollTop = logEl.scrollHeight; };
+
+        try{
+            const decodedData = JSON.parse(LZString.decompressFromEncodedURIComponent(p));
+            const htmlCode = decodedData.htmlCode || "";
+            const pythonCode = decodedData.pythonCode || "";
+
+            log("📦 Pyodide をロード中...");
+            const pyodide = await loadPyodide();
+
+            log("📁 Python コードをロード中...");
+            // Python コードを実行
+            await pyodide.runPythonAsync(pythonCode);
+
+            // JS から Python 関数を呼び出すための安定 API: pyCall(name, args)
+            // Python 側では def 関数名(args): のように dict を受け取る想定
+            window.pyCall = async (funcName, argsObj = {}) => {
+                const payload = JSON.stringify({ funcName, args: argsObj });
+                const code = `
+import json, sys
+_data = json.loads(${JSON.stringify(JSON.stringify({}))})  # dummy to keep scope clean
+req = json.loads(${JSON.stringify("PLACEHOLDER")})
+func_name = req["funcName"]
+args = req["args"]
+if func_name in globals():
+    res = globals()[func_name](args)
+else:
+    res = {"error": f"function '{func_name}' not found"}
+json.dumps(res)
+                `;
+                // 上の code に実際の JSON を埋め込む
+                const finalCode = code.replace(
+                    JSON.stringify("PLACEHOLDER"),
+                    JSON.stringify(payload)
+                );
+                const resultJson = await pyodide.runPythonAsync(finalCode);
+                return JSON.parse(resultJson);
+            };
+
+            log("🌐 HTML をマウントしています...");
+            const appContainer = document.getElementById("app-container");
+            appContainer.innerHTML = htmlCode;
+
+            log("✅ 起動完了！HTML から window.pyCall() で Python 関数を呼び出せます。");
+        }catch(err){
+            const logEl = document.getElementById('status-log');
+            logEl.textContent += `\\n❌ エラーが発生しました: ${err.message}`;
+            console.error(err);
+        }
+    };
+}
+
+// -----------------------------
+// トップページ：エディタ画面
+// -----------------------------
+function renderEditor(){
+    document.body.innerHTML = `
+        <div id="top-header">
+            <div class="title">PyHTML Fullstack Runner <span style="font-size:11px;color:#aaa;">(HTML + Python / Pyodide)</span></div>
+            <div>
+                <a href="?mode=tos" id="tos-link">利用規約</a>
+            </div>
+        </div>
+        <div id="editor-container">
+            <div class="editor-box">
+                <div class="editor-title">
+                    <span>① FRONTEND (HTML)</span>
+                    <span class="sub">実行時はそのまま描画されます</span>
+                </div>
+                <textarea id="html-editor"></textarea>
+            </div>
+            <div class="editor-box">
+                <div class="editor-title">
+                    <span>② BACKEND (Python)</span>
+                    <span class="sub">window.pyCall("関数名", args) で呼び出し</span>
+                </div>
+                <textarea id="python-editor"></textarea>
+            </div>
+        </div>
+        <button id="go">このセットの共有リンクを生成</button>
+        <div id="help-panel">
+            <h3>使い方</h3>
+            <p>1. 左に HTML、右に Python コードを書きます。</p>
+            <p>2. Python 側では、例えば:</p>
+            <pre style="white-space:pre;overflow:auto;background:#1e1e1e;padding:4px;border-radius:3px;">
+def greet(args):
+    name = args.get("name", "名無し")
+    return {"message": f"こんにちは、{name} さん！"}
+            </pre>
+            <p>3. HTML 側からは次のように呼び出せます:</p>
+            <pre style="white-space:pre;overflow:auto;background:#1e1e1e;padding:4px;border-radius:3px;">
+&lt;script&gt;
+async function callPython(){
+  const res = await window.pyCall("greet", { name: "名前" });
+  alert(res.message);
+}
+&lt;/script&gt;
+            </pre>
+            <p>4. 「共有リンク生成」ボタンで URL にコードを埋め込んだリンクを作成できます。</p>
+        </div>
+    `;
+
+    // 初期サンプル
+    document.getElementById('html-editor').value = `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Sample</title></head>
+<body>
+  <h1>Python フルスタック連携サンプル</h1>
+  <button onclick="callPython()">Python 関数 greet() を呼ぶ</button>
+  <h2 id="output" style="color: blue;">ボタンを押してください</h2>
+
+  <script>
+    async function callPython() {
+      if (!window.pyCall) {
+        alert("pyCall がまだ定義されていません。この画面はエディタ用です。共有リンクから実行してください。");
+        return;
+      }
+      const res = await window.pyCall("greet", { name: "有惺" });
+      document.getElementById('output').innerText = res.message || JSON.stringify(res);
+    }
+  <\/script>
+</body>
+</html>`;
+
+    document.getElementById('python-editor').value = `def greet(args):
+    name = args.get("name", "名無し")
+    return {"message": f"こんにちは、{name} さん！Python からの返信です。"}
+`;
+
+    document.getElementById('go').onclick = () => {
+        const htmlCode = document.getElementById('html-editor').value;
+        const pythonCode = document.getElementById('python-editor').value;
+       
+        if (!htmlCode.trim() || !pythonCode.trim()) {
+            alert("HTML と Python の両方のコードを入力してください。");
+            return;
+        }
+
+        const payload = { htmlCode, pythonCode };
+        const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(payload));
+        const base = location.origin + location.pathname;
+        const shareUrl = `${base}?p=${compressed}`;
+
+        // クリップボードにコピーを試みる
+        navigator.clipboard?.writeText(shareUrl).catch(()=>{});
+        alert("共有リンクを生成しました:\\n\\n" + shareUrl + "\\n\\n（クリップボードにもコピーを試みました）");
+    };
+}
+
+// -----------------------------
+// ルーティング
+// -----------------------------
+if (mode === "tos" && !p) {
+    // トップから利用規約だけ見たいとき
+    renderTosStandalone();
+} else if (p) {
+    // 共有リンクアクセス時
+    renderRunnerWithDisclaimer(p);
+} else {
+    // 通常アクセス時：エディタ
+    renderEditor();
+}
+</script>
+
+</body>
+</html>
