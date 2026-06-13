@@ -173,11 +173,26 @@ if(p){
         const decodedCode =
             LZString.decompressFromEncodedURIComponent(p);
 
-        document.getElementById(
-            "disclaimer-container"
-        ).innerHTML =
+        document.getElementById("agree-btn").onclick =
+async ()=>{
+
+    const decodedCode =
+        LZString.decompressFromEncodedURIComponent(p);
+
+    const disclaimer =
+        document.getElementById("disclaimer-container");
+
+    disclaimer.innerHTML =
         "<p>⏳ 実行準備中...</p>";
 
+    try{
+        await runPython(decodedCode);
+    }
+    finally{
+        disclaimer.remove();
+    }
+
+};
         await runPython(decodedCode);
 
     };
