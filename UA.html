@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OS & Browser Detector Pro</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:20px}
+pre{background:#f5f5f5;padding:12px;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<h1>OS & Browser Detector Pro</h1>
+<pre id="out">解析中...</pre>
+<script>
+(async()=>{
+const out=document.getElementById("out");
+const evidence=[];
+
+function add(t){evidence.push(t);}
+
+const OS={ChromeOS:0,Windows:0,Linux:0,Android:0,macOS:0,iOS:0};
+const BR={Chrome:0,Edge:0,Brave:0,Firefox:0,Safari:0};
+
+const ua=navigator.userAgent;
+let uaData=null;
+
+try{
+ if(navigator.userAgentData){
+  uaData=await navigator.userAgentData.getHighEntropyValues([
+   "architecture","bitness","model","platform",
+   "platformVersion","uaFullVersion"
+  ]);
+ }
+}catch(e){}
+
+function scoreUA(){
+ if(ua.includes("CrOS")){OS.ChromeOS+=100;add("UA:CrOS");}
+ if(uaData?.platform==="Chrome OS"){OS.ChromeOS+=60;add("UA-CH ChromeOS");}
+
+ if(ua.includes("Windows")){OS.Windows+=100;add("UA:Windows");}
+ if(ua.includes("Android")){OS.Android+=100;add("UA:Android");}
+ if(ua.includes("Macintosh")){OS.macOS+=100;add("UA:macOS");}
+ if(ua.includes("iPhone")||ua.includes("iPad")){OS.iOS+=100;add("UA:iOS");}
+
+ if(ua.includes("Linux")&&!ua.includes("Android")&&!ua.includes("CrOS")){
+  OS.Linux+=80;add("UA:Linux");
+ }
+
+ if(window.chrome){BR.Chrome+=40;add("window.chrome");}
+ if(window.chrome?.runtime){BR.Chrome+=40;add("chrome.runtime");}
+ if(typeof InstallTrigger!=="undefined"){BR.Firefox+=120;add("Firefox API");}
+ if(navigator.brave){BR.Brave+=120;add("Brave API");}
+ if(ua.includes("Edg/")){BR.Edge+=120;add("Edge UA");}
+
+ const safari=/^((?!chrome|android).)*safari/i.test(ua);
+ if(safari){BR.Safari+=120;add("Safari UA");}
+}
+
+function getGPU(){
+ const c=document.createElement("canvas");
+ const gl=c.getContext("webgl");
+ if(!gl)return null;
+ const ext=gl.getExtension("WEBGL_debug_renderer_info");
+ if(!ext)return null;
+ return {
+  vendor:gl.getParameter(ext.UNMASKED_VENDOR_WEBGL),
+  renderer:gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)
+ };
+}
+
+function canvasFP(){
+ const c=document.createElement("canvas");
+ const x=c.getContext("2d");
+ x.font="18px Arial";
+ x.fillText("FingerprintTest",10,20);
+ return c.toDataURL().slice(-80);
+}
+
+async function audioFP(){
+ try{
+  const ctx=new OfflineAudioContext(1,44100,44100);
+  const osc=ctx.createOscillator();
+  const comp=ctx.createDynamicsCompressor();
+  osc.connect(comp);
+  comp.connect(ctx.destination);
+  osc.start();
+  const buf=await ctx.startRendering();
+  let v=0;
+  const d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i+=200)v+=Math.abs(d[i]);
+  return v.toFixed(6);
+ }catch(e){
+  return "unavailable";
+ }
+}
+
+function fontProbe(){
+ const fonts=[
+  "Arial","Calibri","Segoe UI","Roboto",
+  "Noto Sans","Helvetica","Times New Roman"
+ ];
+ const found=[];
+ const s=document.createElement("span");
+ s.innerHTML="mmmmmmmmmmlli";
+ document.body.appendChild(s);
+ const base=s.offsetWidth;
+ for(const f of fonts){
+   s.style.fontFamily=f+",monospace";
+   if(s.offsetWidth!==base) found.push(f);
+ }
+ s.remove();
+ return found;
+}
+
+scoreUA();
+
+if("usb" in navigator){OS.ChromeOS+=10;BR.Chrome+=5;add("WebUSB");}
+if("bluetooth" in navigator){OS.ChromeOS+=10;BR.Chrome+=5;add("WebBluetooth");}
+if("gpu" in navigator){BR.Chrome+=5;add("WebGPU");}
+
+const gpu=getGPU();
+
+if(gpu){
+ const txt=(gpu.vendor+" "+gpu.renderer).toLowerCase();
+
+ if(txt.includes("intel")){
+  OS.ChromeOS+=8;
+  OS.Windows+=8;
+ }
+
+ if(txt.includes("angle")){
+  OS.ChromeOS+=5;
+  OS.Windows+=5;
+ }
+
+ if(txt.includes("apple")){
+  OS.macOS+=15;
+ }
+}
+
+if(navigator.maxTouchPoints>0){
+ OS.Android+=5;
+ OS.iOS+=5;
+}
+
+const fonts=fontProbe();
+
+if(fonts.includes("Segoe UI")){
+ OS.Windows+=8;
+}
+
+if(fonts.includes("Roboto")){
+ OS.Android+=5;
+}
+
+if(fonts.includes("Helvetica")){
+ OS.macOS+=5;
+}
+
+const audio=await audioFP();
+
+function normalize(o){
+ let t=0;
+ for(const k in o)t+=Math.max(0,o[k]);
+ if(!t)t=1;
+
+ const r={};
+ for(const k in o){
+  r[k]=Math.round(Math.max(0,o[k])/t*1000)/10;
+ }
+ return r;
+}
+
+const osProb=normalize(OS);
+const brProb=normalize(BR);
+
+function best(obj){
+ return Object.entries(obj)
+ .sort((a,b)=>b[1]-a[1])[0];
+}
+
+const bestOS=best(osProb);
+const bestBrowser=best(brProb);
+
+out.textContent=
+"推定OS: "+bestOS[0]+" ("+bestOS[1]+"%)\n"+
+"推定Browser: "+bestBrowser[0]+" ("+bestBrowser[1]+"%)\n\n"+
+"OS確率\n"+JSON.stringify(osProb,null,2)+
+"\n\nBrowser確率\n"+JSON.stringify(brProb,null,2)+
+"\n\nGPU\n"+JSON.stringify(gpu,null,2)+
+"\n\nCanvas FP\n"+canvasFP()+
+"\n\nAudio FP\n"+audio+
+"\n\nフォント\n"+fonts.join(", ")+
+"\n\n根拠\n"+evidence.join("\n");
+})();
+</script>
+</body>
+</html>
